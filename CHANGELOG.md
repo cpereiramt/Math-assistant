@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.0.3] - 2024-06-25
 ### Added
-* Including authetication with Google provider with Oauth 2.0.
+* Including authentication with Google provider with Oauth 2.0.
 
 ## [0.0.2] - 2024-05-08
 ### Added 
