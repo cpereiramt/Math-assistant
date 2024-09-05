@@ -1,0 +1,31 @@
+package com.claySoftware.MathExpAssistant.helpers;
+
+import net.objecthunter.exp4j.Expression;
+import net.objecthunter.exp4j.ExpressionBuilder;
+
+
+
+import java.util.Map;
+
+public class FormulaExecutor {
+
+
+    public FormulaExecutor() {
+
+
+    }
+
+    public double executeFormula(String equation, Map<String, Double> variables)  {
+
+        Expression expression = new ExpressionBuilder(equation)
+                .variables(variables.keySet())
+                .build();
+        // Atribuindo os valores das variáveis
+        for (Map.Entry<String, Double> entry : variables.entrySet()) {
+            expression.setVariable(entry.getKey(), entry.getValue());
+        }
+
+        return expression.evaluate();
+    }
+}
+
