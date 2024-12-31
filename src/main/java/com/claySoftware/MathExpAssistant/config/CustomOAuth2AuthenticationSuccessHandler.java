@@ -13,6 +13,7 @@ import java.io.IOException;
 public class CustomOAuth2AuthenticationSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private static final String DEFAULT_REDIRECT_URL = "mathassistant://";
 
     public CustomOAuth2AuthenticationSuccessHandler(JwtTokenProvider jwtTokenProvider) {
         this.jwtTokenProvider = jwtTokenProvider;
@@ -20,12 +21,13 @@ public class CustomOAuth2AuthenticationSuccessHandler implements AuthenticationS
 
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, IOException {
+        // Crie o token JWT com base na autenticação
         String token = jwtTokenProvider.createToken(authentication);
-        response.addHeader("Authorization", "Bearer " + token);
 
-        // Optionally, you can also write the token to the response body
-        response.setContentType("application/json");
-        response.setCharacterEncoding("UTF-8");
-        response.getWriter().write("{\"token\": \"" + token + "\"}");
+        // Construa a URL de redirecionamento com o token como parâmetro
+        String redirectUrl = DEFAULT_REDIRECT_URL + "?token=" + token;
+
+        // Redirecione para o app com as informações
+        response.sendRedirect(redirectUrl);
     }
 }
