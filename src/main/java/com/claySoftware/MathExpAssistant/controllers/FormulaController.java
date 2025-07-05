@@ -39,6 +39,16 @@ public class FormulaController {
         }
         return "Error when trying to save";
     }
+    @DeleteMapping("/{id}")
+    public String deleteFormula(@PathVariable String id) {
+        Optional<FormulaEntity> formulaToDelete = formulaRepository.findById(id);
+        if(formulaToDelete.isPresent()) {
+            formulaRepository.delete(formulaToDelete.get());
+            return "formula deleted with success !";
+        }
+        return "formula not found !" ;
+
+    }
 
     @GetMapping("/getAll")
     public List<FormulaEntity> getAllFormula() {
