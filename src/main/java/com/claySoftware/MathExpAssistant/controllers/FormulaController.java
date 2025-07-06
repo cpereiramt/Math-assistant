@@ -3,6 +3,7 @@ package com.claySoftware.MathExpAssistant.controllers;
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.services.FormulaService;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import javax.script.ScriptException;
@@ -22,22 +23,15 @@ public class FormulaController {
        this.formulaService = formulaService;
     }
     @PostMapping("/execute")
-    public double executeFormula(
+    public String executeFormula(
             @RequestParam String formulaName,
             @RequestBody Map<String, Double> variables) throws ScriptException {
         //TODO : Implement the logic to use some ai mathematics model when the formula is not found on database
         return formulaService.executeFormula(formulaName, variables);
     }
-    //TODO : later implement some validation for FormulaEntity and on FormulaService
     @PostMapping("/insert")
-    public String createNewFormula(@RequestBody  FormulaEntity formulaEntity) {
-
-
-        FormulaEntity isFormulaDifferentOfNull =  formulaRepository.save(formulaEntity);
-        if(isFormulaDifferentOfNull != null) {
-            return "new formula successful saved";
-        }
-        return "Error when trying to save";
+    public String createNewFormula(@RequestBody @Validated FormulaEntity formulaEntity) {
+        return formulaService.insertNewFormula(formulaEntity);
     }
     @DeleteMapping("/{id}")
     public String deleteFormula(@PathVariable String id) {

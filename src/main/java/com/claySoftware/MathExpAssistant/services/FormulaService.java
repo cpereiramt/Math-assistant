@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import javax.script.ScriptException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class FormulaService {
@@ -17,18 +18,23 @@ public class FormulaService {
 
     private final FormulaExecutor formulaExecutor = new FormulaExecutor();
     //TODO : Put some form of cache, maybe using caffeine
-    public double executeFormula(String formulaName, Map<String, Double> variables) throws ScriptException {
-        // Busca a fórmula pelo nome
-        FormulaEntity formulaEntity = formulaRepository.findByName(formulaName)
-                .orElseThrow(() -> new IllegalArgumentException("Fórmula não encontrada"));
-
-        // Verifica se todos os parâmetros esperados foram fornecidos
-        if (!variables.keySet().containsAll(formulaEntity.getParameters())) {
-            throw new IllegalArgumentException("Parâmetros insuficientes ou incorretos fornecidos");
+    public String executeFormula(String formulaName, Map<String, Double> variables) throws ScriptException {
+        Optional<FormulaEntity> formulaEntity = formulaRepository.findByName(formulaName);
+        if(formulaEntity.isEmpty()) {
+            return "Formula not Found on database";
         }
+        if (!variables.keySet().containsAll(formulaEntity.get().getParameters())) {
+            return "some parameters are not provide for calculation";
+        }
+        return String.valueOf(formulaExecutor.executeFormula(formulaEntity.get().getEquation(), variables));
+    }
 
-        // Executa a fórmula com as variáveis fornecidas
-        return formulaExecutor.executeFormula(formulaEntity.getEquation(), variables);
+    public String insertNewFormula(FormulaEntity formulaEntity) {
+        FormulaEntity isFormulaDifferentOfNull =  formulaRepository.save(formulaEntity);
+        if(isFormulaDifferentOfNull.getId() != null)  {
+            return "new formula successful saved";
+        }
+        return "Error when trying to save";
     }
 }
 
