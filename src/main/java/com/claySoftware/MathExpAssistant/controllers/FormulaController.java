@@ -25,10 +25,10 @@ public class FormulaController {
     public double executeFormula(
             @RequestParam String formulaName,
             @RequestBody Map<String, Double> variables) throws ScriptException {
-
+        //TODO : Implement the logic to use some ai mathematics model when the formula is not found on database
         return formulaService.executeFormula(formulaName, variables);
     }
-    //TODO : posteriormente refatorar os endpoints abaixo para colocar a chamadas e tratamentos no FormulaService
+    //TODO : later implement some validation for FormulaEntity and on FormulaService
     @PostMapping("/insert")
     public String createNewFormula(@RequestBody  FormulaEntity formulaEntity) {
 

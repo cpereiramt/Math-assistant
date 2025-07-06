@@ -16,7 +16,7 @@ public class FormulaService {
     private FormulaRepository formulaRepository;
 
     private final FormulaExecutor formulaExecutor = new FormulaExecutor();
-
+    //TODO : Put some form of cache, maybe using caffeine
     public double executeFormula(String formulaName, Map<String, Double> variables) throws ScriptException {
         // Busca a fórmula pelo nome
         FormulaEntity formulaEntity = formulaRepository.findByName(formulaName)
