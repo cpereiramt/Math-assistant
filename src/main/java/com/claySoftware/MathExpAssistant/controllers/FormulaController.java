@@ -31,6 +31,7 @@ public class FormulaController {
     }
     @PostMapping("/insert")
     public String createNewFormula(@RequestBody @Validated FormulaEntity formulaEntity) {
+        formulaEntity.setStatus("private");
         return formulaService.insertNewFormula(formulaEntity);
     }
     @DeleteMapping("/{id}")
@@ -46,8 +47,10 @@ public class FormulaController {
 
     @GetMapping("/getAll")
     public List<FormulaEntity> getAllFormula() {
-        return formulaRepository.findAll();
+        Optional<List<FormulaEntity>> formulaList = formulaRepository.findAllByStatus("public");
+        return formulaList.get();
     }
+
 
     @GetMapping("/{name}")
     public Optional<FormulaEntity> getFormulaByName(@PathVariable String name) {

@@ -28,6 +28,7 @@ public class FormulaEntity {
     @NotEmpty(message = "parameters is mandatory")
     private List<String> parameters;
 
+    private String status;
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
@@ -43,4 +44,7 @@ public class FormulaEntity {
 
     public List<String> getParameters() { return parameters; }
     public void setParameters(List<String> parameters) { this.parameters = parameters; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
 }
