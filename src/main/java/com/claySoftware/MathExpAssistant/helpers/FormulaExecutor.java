@@ -10,17 +10,14 @@ import java.util.Map;
 public class FormulaExecutor {
 
 
-    public FormulaExecutor() {
-
-
-    }
+    public FormulaExecutor() {}
 
     public double executeFormula(String equation, Map<String, Double> variables)  {
 
         Expression expression = new ExpressionBuilder(equation)
                 .variables(variables.keySet())
                 .build();
-        // Atribuindo os valores das variáveis
+        // passing the values of variables
         for (Map.Entry<String, Double> entry : variables.entrySet()) {
             expression.setVariable(entry.getKey(), entry.getValue());
         }

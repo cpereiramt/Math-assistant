@@ -9,9 +9,9 @@ public class GlobalCorsConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/**") // Aplica a todas as rotas
-                .allowedOrigins("*") // Permite localhost para desenvolvimento
-                .allowedMethods("*") // Permite todos os métodos HTTP
-                .allowedHeaders("*") ;// Permite todos os cabeçalhos
+        registry.addMapping("/**") // For all routes development
+                .allowedOrigins("*") // Localhost for development
+                .allowedMethods("*") // Allowed all http methods for development
+                .allowedHeaders("*") ;// Allowed all header for development
     }
 }

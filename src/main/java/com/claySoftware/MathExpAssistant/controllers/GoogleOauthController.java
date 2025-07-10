@@ -66,9 +66,10 @@ public class GoogleOauthController {
         if (tokenResponse.getStatusCode() == HttpStatus.OK) {
             // Inclua o token no redirecionamento de volta ao app
             String token = (String) tokenResponse.getBody().get("access_token");
-            response.sendRedirect("mathassistant://?token=" + token);
+            String redirectUrl = redirectUri + "?token=" + token;
+            response.sendRedirect(redirectUrl);
         } else {
-            response.sendRedirect("mathassistant://?error=auth_failed");
+            response.sendRedirect(redirectUri + "?error=auth_failed");
         }
     }
 
@@ -85,7 +86,7 @@ public class GoogleOauthController {
         if (response.getStatusCode() == HttpStatus.OK) {
             return ResponseEntity.ok(response.getBody());
         } else {
-            return ResponseEntity.status(response.getStatusCode()).body("Erro ao buscar informações do usuário.");
+            return ResponseEntity.status(response.getStatusCode()).body("Error on query user information.");
         }
     }
 }
