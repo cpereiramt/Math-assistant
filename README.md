@@ -1,5 +1,36 @@
 # Math-assistant
 
+## Quick Start
+
+Siga estes passos rápidos para compilar, executar e testar o backend localmente (Windows):
+
+- Preparar banco de dados local (Docker):
+
+```powershell
+docker-compose up -d
+```
+
+- Build e executar a aplicação (Windows):
+
+```powershell
+.
+gradlew.bat build
+gradlew.bat bootRun
+```
+
+- Executar testes:
+
+```powershell
+gradlew.bat test
+```
+
+- Configurações e variáveis:
+
+- As propriedades do Spring Boot ficam em `src/main/resources/application.properties`.
+- Para configurar o MongoDB local, ajuste `spring.data.mongodb.*` ou use o `docker-compose.yml` já presente.
+
+Consulte a seção de Design abaixo para detalhes da arquitetura e endpoints.
+
 # Documento de Design do Sistema de Assistente de Matemática with Java and ReactJS/React Native
 
 ## 1. Introdução

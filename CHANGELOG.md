@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+ 
+## [0.4.2] - 2026-01-03
+### Documentation
+- Atualizado: documentação do projeto (docs: updating docs).
+
+## [0.4.1] - 2025-07-09
+### Fixed
+- Corrigido: lógica de status para `Formula` (Fix: implementing status logic for formulas).
+- Corrigido: salvamento de tradução de comentários (Fix: saving translation for comments).
+
+## [0.4.0] - 2025-07-06
+### Added
+- Adicionado: validações e tratamento de erros da aplicação (Feat: configuring validations and error handles on application).
+
+### Changed
+- Ajustado: anotações TODO adicionadas para acompanhamento (feat: adding some TODO annotations).
+
+## [0.3.0] - 2025-07-05
+### Added
+- Adicionado: rota de delete para `Formula` (Feat: configuring delete route).
+
+## [0.2.1] - 2024-12-31
+### Changed
+- Ajustado: fluxo OAuth (feat: adjusting oauth flow).
+
+## [0.2.0] - 2024-09-05
+### Added
+- Adicionado: lógica de execução de fórmulas (strategy pattern) (Feat: Implementing formula logic using strategy pattern).
+- Adicionado: dependências `exp4j` e MongoDB (Feat: Installing exp4j and mongodb dependencies).
+- Adicionado: `docker-compose.yml` para MongoDB local (Feat: Creating docker compose.yml for automate Mongodb configuration on localhost).
+- Adicionado: propriedades locais do MongoDB (Feat: Adding properties for mongodb database locally).
+
+### Changed
+- Ajustado: `SecurityConfig` para permitir métodos POST quando necessário (Feat: Change SecurityConfig settings to allow Post method).
+
+### Fixed / Chore
+- Removido comentário em configuração JWT (Feat: Removing comment from Jwt configuration).
 
 
 ## [0.1.0] - 2024-07-16
