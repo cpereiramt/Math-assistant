@@ -1,9 +1,9 @@
 # Math-assistant
 
-# Documento de Design do Sistema de Assistente de Matemática com Java e Flutter
+# Documento de Design do Sistema de Assistente de Matemática with Java and ReactJS/React Native
 
 ## 1. Introdução
-Este documento descreve a arquitetura e os requisitos do sistema de assistente de matemática, que será uma aplicação móvel desenvolvida utilizando o framework Flutter para o frontend e Java para o backend. A integração entre o frontend e o backend será realizada por meio de APIs RESTful.
+Este documento descreve a arquitetura e os requisitos do sistema de assistente de matemática. O backend é Java (Spring Boot). The web frontend will be a ReactJS app and the mobile frontend will use React Native. The integration between frontend and backend is performed via RESTful APIs.
 
 ## 2. Requisitos Funcionais
 ### 2.1 Registro e Autenticação de Usuários
@@ -20,28 +20,39 @@ Este documento descreve a arquitetura e os requisitos do sistema de assistente d
 - Receber e exibir os resultados dos cálculos fornecidos pelo backend.
 
 ## 3. Requisitos Não Funcionais
+
 ### 3.1 Desempenho
+
 - Garantir que as APIs RESTful do backend sejam otimizadas para oferecer uma resposta rápida, mesmo para cálculos complexos.
-- Utilizar a renderização rápida e eficiente dos widgets do Flutter para garantir um desempenho elevado no frontend.
+- Frontend: use ReactJS performance best practices (memoization, avoid unnecessary re-renders).
+
+Mobile: React Native performance considerations (use native modules sparingly, optimize lists).
 
 ### 3.2 Segurança
+
 - Implementar autenticação e autorização robustas nas APIs RESTful para proteger os dados do usuário.
 - Utilizar HTTPS para comunicação segura entre o frontend e o backend.
 
 ### 3.3 Interface do Usuário
-- Desenvolver uma interface do usuário intuitiva e atraente utilizando widgets personalizáveis do Flutter para proporcionar uma experiência de usuário rica e envolvente.
+
+- Desenvolver uma interface do usuário intuitiva e atraente usando ReactJS for web (components, hooks) and React Native for mobile.
 
 ## 4. Arquitetura do Sistema
-### 4.1 Frontend (Flutter)
-- A interface do usuário será desenvolvida utilizando o framework Flutter, permitindo a criação de aplicativos móveis nativos para Android e iOS a partir de um único código base.
-- Utilizar widgets personalizáveis do Flutter para construir uma interface do usuário responsiva e atraente.
+
+### 4.1 Frontend (ReactJS / React Native)
+
+- Web: ReactJS — single-page app for browsers. Use `create-react-app`, Vite, or Next.js as preferred starter.
+- Mobile: React Native — cross-platform mobile app compatible with Android and iOS.
+- Use `fetch`/`axios` on the client to call the REST endpoints exposed by the backend.
 
 ### 4.2 Backend (Java)
+
 - O backend será construído utilizando o framework Spring Boot para criar uma API RESTful.
 - Implementar endpoints RESTful para autenticação de usuários, consulta de fórmulas e cálculo de fórmulas.
 - Utilizar um banco de dados relacional (como MySQL ou PostgreSQL) para armazenar dados de usuários e fórmulas.
 
 ## 5. Fluxo de Trabalho
+
 1. Um usuário acessa o aplicativo móvel e faz login.
 2. O usuário pesquisa ou navega pelas fórmulas disponíveis no aplicativo.
 3. O usuário seleciona uma fórmula e insere os valores para os parâmetros.
@@ -50,16 +61,21 @@ Este documento descreve a arquitetura e os requisitos do sistema de assistente d
 6. O resultado é exibido para o usuário no aplicativo móvel.
 
 ## 6. Considerações de Implementação
+
+
 - Utilizar o Spring Security para implementar autenticação e autorização seguras no backend.
-- Utilizar bibliotecas como Retrofit no Flutter para fazer chamadas de API RESTful para o backend.
+- Use `axios` or the browser/React Native `fetch` API to call the backend REST endpoints. For React Native, prefer the built-in `fetch` or `axios` with native adapters.
 - Implementar testes automatizados tanto no frontend quanto no backend para garantir a qualidade e a estabilidade do sistema.
 
 ## 7. Cronograma de Desenvolvimento
+
 - Definir marcos e prazos para o desenvolvimento, testes e lançamento do aplicativo, levando em consideração a integração entre o frontend e o backend.
 
 ## 8. Considerações de Manutenção
+
 - Monitorar o desempenho do sistema e fazer ajustes conforme necessário para garantir uma experiência do usuário ideal.
-- Estar atento às atualizações do Flutter e do Spring Boot e aplicar patches de segurança e melhorias conforme necessário.
+-- Estar atento às atualizações do ReactJS/React Native e do Spring Boot e aplicar patches de segurança e melhorias conforme necessário.
 
 ## 9. Conclusão
+
 Este documento estabelece a estrutura e os requisitos do sistema de assist
