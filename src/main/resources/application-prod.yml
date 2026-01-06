@@ -1,0 +1,6 @@
+app:
+  secrets:
+    use-aws: true
+
+# Comma-separated AWS secret names to load (do NOT store secrets here)
+# aws.secrets.names: my/secret/name,other/secret
