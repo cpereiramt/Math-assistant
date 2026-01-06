@@ -29,6 +29,39 @@ gradlew.bat test
 - As propriedades do Spring Boot ficam em `src/main/resources/application.properties`.
 - Para configurar o MongoDB local, ajuste `spring.data.mongodb.*` ou use o `docker-compose.yml` já presente.
 
+Local dev & secrets
+
+- Copy `.env.example` to `.env` and fill the required values (keep `.env` gitignored).
+- Two helper scripts were added to load `.env` into the process and run the app locally:
+	- Windows PowerShell: `scripts/run-local.ps1`
+	- Unix/macOS: `scripts/run-local.sh` (make executable)
+
+Usage examples:
+
+Windows PowerShell (run from repo root):
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-local.ps1
+```
+
+Unix/macOS:
+```bash
+chmod +x ./scripts/run-local.sh
+./scripts/run-local.sh
+```
+
+- Alternative: use `dotenv-cli` to load `.env` when running Gradle: `dotenv -e .env -- gradlew bootRun`.
+- Docker / compose: `docker-compose.yml` supports `env_file: .env` so containers read the same file.
+
+EC2 / Production notes (overview):
+- In production prefer AWS Secrets Manager (or cloud secret store). Two common approaches:
+	1. Use Spring Cloud AWS starter that maps secrets to properties.
+ 2. Implement an `EnvironmentPostProcessor` that reads AWS Secrets Manager via AWS SDK and injects a `MapPropertySource` before Spring context refresh — this supports EC2 IAM roles and local testing via `AWS_PROFILE` or LocalStack.
+- The project can be extended to fetch secrets at startup so `${VAR}` placeholders in `application.properties` are resolved from Secrets Manager.
+
+Security notes:
+- Never commit real secrets. Use `.env.example` to document required variables and store real values in Secret Manager, `.env` locally, or CI/CD secret stores.
+
+
 Consulte a seção de Design abaixo para detalhes da arquitetura e endpoints.
 
 # Documento de Design do Sistema de Assistente de Matemática with Java and ReactJS/React Native
