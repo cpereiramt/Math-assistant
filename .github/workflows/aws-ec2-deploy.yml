@@ -54,9 +54,9 @@ jobs:
           script: |
             set -e
             aws ecr get-login-password --region us-east-1 \
-            | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+            | docker login --username AWS --password-stdin "${{ secrets.ECR_REPOSITORY }}"
 
-            docker pull "${ECR_REPOSITORY}:latest"
+            docker pull "${{ secrets.ECR_REPOSITORY }}:latest"
             docker stop app || true
             docker rm app || true
-            docker run -d --restart unless-stopped --name app -p 8080:8080 "${ECR_REPOSITORY}:latest"
+            docker run -d --restart unless-stopped --name app -p 8080:8080 "${{ secrets.ECR_REPOSITORY }}:latest"
