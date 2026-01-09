@@ -1,45 +1,54 @@
 name: CI/CD Spring Boot AWS
 
+
 on:
   push:
-    branches: [ "main" ]
+      branches: [ "main" ]
+
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+    deploy:
+      runs-on: ubuntu-latest
 
-    steps:
-    - uses: actions/checkout@v4
 
-    - uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+steps:
+- uses: actions/checkout@v4
 
-    - run: ./gradlew clean build -x test
 
-    - uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
+- uses: actions/setup-java@v4
+  with:
+    distribution: 'temurin'
+    java-version: '17'
 
-    - run: |
-        aws ecr get-login-password --region $AWS_REGION |
-        docker login --username AWS --password-stdin $ECR_REPOSITORY
 
-    - run: |
-        docker build -t app .
-        docker tag app:latest $ECR_REPOSITORY:latest
-        docker push $ECR_REPOSITORY:latest
+- run: ./gradlew clean build -x test
 
-    - uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ${{ secrets.EC2_USER }}
-        key: ${{ secrets.EC2_SSH_KEY }}
-        script: |
-          docker pull $ECR_REPOSITORY:latest
-          docker stop app || true
-          docker rm app || true
-          docker run -d --name app -p 8080:8080 $ECR_REPOSITORY:latest
+
+- uses: aws-actions/configure-aws-credentials@v4
+  with:
+    aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    aws-region: ${{ secrets.AWS_REGION }}
+
+
+- run: |
+    aws ecr get-login-password --region ${{ secrets.AWS_REGION }} |
+    docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY }}
+
+
+- run: |
+    docker build -t app .
+    docker tag app:latest ${{ secrets.ECR_REPOSITORY }}:latest
+    docker push ${{ secrets.ECR_REPOSITORY }}:latest
+
+
+- uses: appleboy/ssh-action@v1.0.3
+  with:
+    host: ${{ secrets.EC2_HOST }}
+    username: ${{ secrets.EC2_USER }}
+    key: ${{ secrets.EC2_SSH_KEY }}
+    script: |
+        docker pull ${{ secrets.ECR_REPOSITORY }}:latest
+        docker stop app || true
+        docker rm app || true
+        docker run -d --name app -p 8080:8080 ${{ secrets.ECR_REPOSITORY }}:latest
