@@ -28,25 +28,31 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .cors(cors -> cors.and())
-                .csrf(csrf -> csrf.disable())
-                .authorizeHttpRequests(authorizeRequests ->
-                        authorizeRequests
-                                .requestMatchers("/login", "/error").permitAll()
-                                .anyRequest().authenticated()
-                )
-                .oauth2Login(oauth2Login -> {
-                    oauth2Login
-                            .authorizationEndpoint(authorizationEndpoint ->
-                                    authorizationEndpoint
-                                            .authorizationRequestRepository(new HttpSessionOAuth2AuthorizationRequestRepository())
-                            )
-                            .userInfoEndpoint(userInfoEndpoint ->
-                                    userInfoEndpoint.oidcUserService(oidcUserService())
-                            )
-                            .successHandler(successHandler);
+                .cors(cors -> {
                 })
-                .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider), UsernamePasswordAuthenticationFilter.class);
+                .csrf(csrf -> csrf.disable())
+                .authorizeHttpRequests(auth -> auth
+                        // públicos (healthcheck e docs)
+                        .requestMatchers(
+                                "/actuator/**",
+                                "/api/docs/**",
+                                "/api/docs/v3/api-docs/**",
+                                "/v3/api-docs/**", // se você não mudar o path do api-docs ainda
+                                "/swagger-ui/**", // se usar default assets
+                                "/swagger-ui.html", // você pode trocar para denyAll depois
+                                "/error",
+                                "/login")
+                        .permitAll()
+                        .anyRequest().authenticated())
+                .oauth2Login(oauth2 -> oauth2
+                        .authorizationEndpoint(e -> e
+                                .authorizationRequestRepository(new HttpSessionOAuth2AuthorizationRequestRepository()))
+                        .userInfoEndpoint(u -> u.oidcUserService(oidcUserService()))
+                        .successHandler(successHandler));
+
+        http.addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider),
+                UsernamePasswordAuthenticationFilter.class);
+
         return http.build();
     }
 
