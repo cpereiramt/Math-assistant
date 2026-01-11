@@ -31,7 +31,6 @@ public class CustomOAuth2AuthenticationSuccessHandler implements AuthenticationS
 
         // build the redirectURL
         String redirectUrl = DEFAULT_REDIRECT_URL + "?token=" + token;
-        System.out.print("token ------> " + token);
 
         // Redirect to the mobile app or to web app
         response.sendRedirect(DEFAULT_REDIRECT_URL);
