@@ -1,6 +1,5 @@
 package com.claySoftware.MathExpAssistant.config;
 
-
 import com.claySoftware.MathExpAssistant.services.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -26,26 +25,44 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.startsWith("s/docs")
+                || path.startsWith("/v3/api-docs")
+                || path.startsWith("/swagger-ui")
+                || path.startsWith("/actuator")
+                || path.startsWith("/oauth2")
+                || path.startsWith("/login/oauth2")
+                || path.startsWith("/error");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
-        String token = request.getHeader("Authorization");
-        if (token != null && token.startsWith("Bearer ")) {
-            token = token.substring(7);
+            HttpServletResponse response,
+            FilterChain filterChain)
+            throws ServletException, IOException {
+
+        String header = request.getHeader("Authorization");
+
+        if (header != null && header.startsWith("Bearer ")) {
+            String token = header.substring(7);
             try {
                 Claims claims = Jwts.parser()
                         .setSigningKey(jwtTokenProvider.getJwtSecret())
                         .parseClaimsJws(token)
                         .getBody();
+
                 String username = claims.getSubject();
                 User user = new User(username, "", Collections.emptyList());
-                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(user, token, user.getAuthorities());
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (Exception e) {
-                System.out.println("Invalid token: " + e.getMessage());
+
+                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(user, token,
+                        user.getAuthorities());
+
+                SecurityContextHolder.getContext().setAuthentication(auth);
+            } catch (Exception ignored) {
             }
         }
+
         filterChain.doFilter(request, response);
     }
 }

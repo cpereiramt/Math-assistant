@@ -16,51 +16,51 @@ public class SecurityConfig {
 
         private final JwtTokenProvider jwtTokenProvider;
 
-        private final CustomOAuth2AuthenticationSuccessHandler successHandler;
-
-        public SecurityConfig(JwtTokenProvider jwtTokenProvider,
-                        CustomOAuth2AuthenticationSuccessHandler successHandler) {
+        public SecurityConfig(JwtTokenProvider jwtTokenProvider) {
                 this.jwtTokenProvider = jwtTokenProvider;
-                this.successHandler = successHandler;
         }
 
         @Bean
         public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+
                 http
+                                .csrf(csrf -> csrf.disable())
                                 .cors(cors -> {
                                 })
-                                .csrf(csrf -> csrf.disable())
                                 .authorizeHttpRequests(auth -> auth
-                                                // públicos (healthcheck e docs)
+                                                // Swagger + OpenAPI
                                                 .requestMatchers(
-                                                                "/actuator/**",
-                                                                "/api/docs/**",
-                                                                "/api/docs/v3/api-docs/**",
-                                                                "/v3/api-docs",
-                                                                "/v3/api-docs/**", // se você não mudar o path do //
-                                                                                   // api-docs ainda
-                                                                "/swagger-ui/**", // se usar default assets
-                                                                "/swagger-ui.html", // você pode trocar para denyAll //
-                                                                                    // depois
-                                                                "/error",
-                                                                "/login")
+                                                                "/docs/**",
+                                                                "/v3/api-docs/**",
+                                                                "/swagger-ui/**",
+                                                                "/swagger-ui.html")
                                                 .permitAll()
-                                                .anyRequest().authenticated())
-                                .oauth2Login(oauth2 -> oauth2
-                                                .authorizationEndpoint(e -> e
-                                                                .authorizationRequestRepository(
-                                                                                new HttpSessionOAuth2AuthorizationRequestRepository()))
-                                                .userInfoEndpoint(u -> u.oidcUserService(oidcUserService()))
-                                                .successHandler(successHandler));
 
-                http.addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider),
+                                                // Actuator
+                                                .requestMatchers("/actuator/**").permitAll()
+
+                                                // OAuth2 endpoints internos do Spring
+                                                .requestMatchers(
+                                                                "/oauth2/**",
+                                                                "/login/oauth2/**",
+                                                                "/error")
+                                                .permitAll()
+
+                                                // Emissão de JWT (exige login Google)
+                                                .requestMatchers("/auth/token").authenticated()
+
+                                                // API protegida por JWT
+                                                .requestMatchers("/api/**").authenticated()
+
+                                                .anyRequest().denyAll())
+                                .oauth2Login(oauth2 -> {
+                                });
+
+                http.addFilterBefore(
+                                new JwtAuthenticationFilter(jwtTokenProvider),
                                 UsernamePasswordAuthenticationFilter.class);
 
                 return http.build();
         }
 
-        @Bean
-        public OidcUserService oidcUserService() {
-                return new OidcUserService();
-        }
 }
