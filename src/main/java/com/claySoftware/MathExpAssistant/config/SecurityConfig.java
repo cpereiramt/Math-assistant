@@ -3,12 +3,15 @@ package com.claySoftware.MathExpAssistant.config;
 import com.claySoftware.MathExpAssistant.services.JwtTokenProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 @Configuration
 @EnableWebSecurity
@@ -21,7 +24,8 @@ public class SecurityConfig {
         }
 
         @Bean
-        public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        public SecurityFilterChain securityFilterChain(HttpSecurity http, 
+                        ApiAuthenticationEntryPoint apiEntryPoint) throws Exception {
 
                 http
                                 .csrf(csrf -> csrf.disable())
@@ -53,6 +57,11 @@ public class SecurityConfig {
                                                 .requestMatchers("/api/**").authenticated()
 
                                                 .anyRequest().denyAll())
+
+                                .exceptionHandling(ex -> ex
+                                                .defaultAuthenticationEntryPointFor(
+                                                                apiEntryPoint,
+                                                                new AntPathRequestMatcher("/auth/token")))
                                 .oauth2Login(oauth2 -> {
                                 });
 

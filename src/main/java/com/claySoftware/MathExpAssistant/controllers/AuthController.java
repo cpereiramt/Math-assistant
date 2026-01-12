@@ -2,6 +2,8 @@ package com.claySoftware.MathExpAssistant.controllers;
 
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,13 +20,17 @@ public class AuthController {
         this.jwtTokenProvider = jwtTokenProvider;
     }
 
-@GetMapping("/token")
-public Map<String, Object> token(Authentication authentication) {
-String jwt = jwtTokenProvider.createToken(authentication);
-return Map.of(
-"tokenType", "Bearer",
-"accessToken", jwt,
-"expiresIn", 3600
-);
-}
+    @GetMapping("/token")
+    public ResponseEntity<?> token(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of(
+                            "error", "not_authenticated",
+                            "message", "Faça login abrindo a URL de login em uma nova aba e depois tente novamente.",
+                            "loginUrl", "/oauth2/authorization/google"));
+        }
+        String jwt = jwtTokenProvider.createToken(authentication);
+        return ResponseEntity.ok(Map.of("token", jwt));
+
+    }
 }
