@@ -13,7 +13,7 @@ import java.io.IOException;
 @Component
 public class CustomOAuth2AuthenticationSuccessHandler implements AuthenticationSuccessHandler {
 
-    private String DEFAULT_REDIRECT_URL = "/api/docs"; // redirect for web
+    private String DEFAULT_REDIRECT_URL = "/docs"; // redirect for web
 
     private final JwtTokenProvider jwtTokenProvider;
     // private static final String DEFAULT_REDIRECT_URL = "mathassistant://";
