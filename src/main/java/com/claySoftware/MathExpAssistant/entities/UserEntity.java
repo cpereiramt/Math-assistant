@@ -3,7 +3,8 @@ package com.claySoftware.MathExpAssistant.entities;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
-import com.claySoftware.MathExpAssistant.model.UserPlan;
+
+import com.claySoftware.MathExpAssistant.models.UserPlan;
 
 import java.time.Instant;
 import lombok.Getter;

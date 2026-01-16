@@ -1,8 +1,8 @@
 package com.claySoftware.MathExpAssistant.utils;
 
-import com.claySoftware.MathExpAssistant.model.UserPlan;
-
 import org.springframework.stereotype.Component;
+
+import com.claySoftware.MathExpAssistant.models.UserPlan;
 
 @Component
 public class AdminBypass {

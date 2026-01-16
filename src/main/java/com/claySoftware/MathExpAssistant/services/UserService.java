@@ -6,7 +6,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import com.claySoftware.MathExpAssistant.entities.UserEntity;
-import com.claySoftware.MathExpAssistant.model.UserPlan;
+import com.claySoftware.MathExpAssistant.models.UserPlan;
 import com.claySoftware.MathExpAssistant.repositories.UserRepository;
 
 import java.time.Instant;

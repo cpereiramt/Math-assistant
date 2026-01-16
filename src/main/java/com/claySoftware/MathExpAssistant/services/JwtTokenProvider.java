@@ -9,7 +9,7 @@ import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.stereotype.Service;
 
 import com.claySoftware.MathExpAssistant.entities.UserEntity;
-import com.claySoftware.MathExpAssistant.model.UserPlan;
+import com.claySoftware.MathExpAssistant.models.UserPlan;
 import com.claySoftware.MathExpAssistant.utils.AdminBypass;
 
 import java.util.Date;
