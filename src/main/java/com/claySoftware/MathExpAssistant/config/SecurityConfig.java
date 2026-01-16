@@ -24,8 +24,9 @@ public class SecurityConfig {
         }
 
         @Bean
-        public SecurityFilterChain securityFilterChain(HttpSecurity http, 
-                        ApiAuthenticationEntryPoint apiEntryPoint) throws Exception {
+        public SecurityFilterChain securityFilterChain(HttpSecurity http,
+                        ApiAuthenticationEntryPoint apiEntryPoint,
+                        OAuth2LoginSuccessHandler successHandler) throws Exception {
 
                 http
                                 .csrf(csrf -> csrf.disable())
@@ -62,8 +63,7 @@ public class SecurityConfig {
                                                 .defaultAuthenticationEntryPointFor(
                                                                 apiEntryPoint,
                                                                 new AntPathRequestMatcher("/auth/token")))
-                                .oauth2Login(oauth2 -> {
-                                });
+                                .oauth2Login(oauth2 -> oauth2.successHandler(successHandler));
 
                 http.addFilterBefore(
                                 new JwtAuthenticationFilter(jwtTokenProvider),
