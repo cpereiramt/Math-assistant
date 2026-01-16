@@ -33,4 +33,4 @@ Get-Content $EnvFile | ForEach-Object {
 }
 
 Write-Host "Environment loaded from $EnvFile"
-& .\gradlew.bat bootRun
+& .\gradlew.bat bootRun <#--debug-jvm #>
