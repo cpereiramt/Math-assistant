@@ -4,12 +4,20 @@ import org.springframework.stereotype.Component;
 
 import com.claySoftware.MathExpAssistant.models.UserPlan;
 
+import org.springframework.core.env.Environment;
+
 @Component
 public class AdminBypass {
 
-    private static final String ADMIN_EMAIL = "cpereiramt@gmail.com";
+    private final Environment environment;
+
+    public AdminBypass(Environment environment) {
+        this.environment = environment;
+    }
 
     public boolean isAdminEmail(String email) {
+        String ADMIN_EMAIL = this.environment.getProperty("ADMIN_CREDS");
+        System.out.println("Admin email: " + ADMIN_EMAIL);
         return ADMIN_EMAIL.equalsIgnoreCase(email);
     }
 

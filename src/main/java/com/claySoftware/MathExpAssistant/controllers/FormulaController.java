@@ -1,10 +1,12 @@
 package com.claySoftware.MathExpAssistant.controllers;
 
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
+import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.services.FormulaService;
 
 import org.springframework.aop.support.AopUtils;
+import org.springframework.security.core.Authentication;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +20,7 @@ import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.bulkhead.BulkheadFullException;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
+import com.claySoftware.MathExpAssistant.utils.AdminBypass;
 
 @RestController
 @RequestMapping("/api/formulas")
@@ -25,10 +28,13 @@ public class FormulaController {
 
     private final FormulaService formulaService;
     private final FormulaRepository formulaRepository;
+    private final AdminBypass adminBypass;
 
-    public FormulaController(FormulaService formulaService, FormulaRepository formulaRepository) {
+    public FormulaController(FormulaService formulaService, FormulaRepository formulaRepository,
+            AdminBypass adminBypass) {
         this.formulaRepository = formulaRepository;
         this.formulaService = formulaService;
+        this.adminBypass = adminBypass;
     }
 
     @PostMapping("/execute")
@@ -39,39 +45,51 @@ public class FormulaController {
             @RequestBody Map<String, Double> variables) throws ScriptException {
         // TODO : Implement the logic to use some ai mathematics model when the formula
         // is not found on database
-        return formulaService.executeFormula(formulaName, variables);
+        return formulaService.executeFormula(formulaName.toUpperCase(), variables);
     }
 
     @PostMapping("/insert")
     @RateLimiter(name = "publicApi", fallbackMethod = "insertRateLimitFallback")
     @Bulkhead(name = "publicApi", fallbackMethod = "insertBulkheadFallback")
     public String createNewFormula(@RequestBody @Validated FormulaEntity formulaEntity) {
-        formulaEntity.setStatus("private");
+
+        formulaEntity.setStatus(FormulaStatus.UNDER_REVIEW);
+        formulaEntity.setName(formulaEntity.getName().toUpperCase());
         return formulaService.insertNewFormula(formulaEntity);
     }
 
-    @DeleteMapping("/{id}")
-    public String deleteFormula(@PathVariable String id) {
+    @DeleteMapping("/delete/{id}")
+    public String deleteFormula(@PathVariable String id, Authentication authentication) {
         Optional<FormulaEntity> formulaToDelete = formulaRepository.findById(id);
+        String  email = (String) authentication.getName();
+
+        if (!adminBypass.isAdminEmail(email)) {
+            return "Access denied";
+        }
+
         if (formulaToDelete.isPresent()) {
             formulaRepository.delete(formulaToDelete.get());
             return "formula deleted with success !";
         }
         return "formula not found !";
-
     }
 
     @GetMapping("/getAll")
     @RateLimiter(name = "publicApi", fallbackMethod = "getAllRateLimitFallback")
     @Bulkhead(name = "publicApi", fallbackMethod = "getAllBulkheadFallback")
     public List<FormulaEntity> getAllFormula() {
-        Optional<List<FormulaEntity>> formulaList = formulaRepository.findAllByStatus("public");
+        Optional<List<FormulaEntity>> formulaList = formulaRepository.findAllByStatus("PUBLIC");
         return formulaList.get();
     }
 
-    @GetMapping("/{name}")
+    @GetMapping("/name/{name}")
     public Optional<FormulaEntity> getFormulaByName(@PathVariable String name) {
-        return formulaRepository.findByName(name);
+        return formulaRepository.findByName(name.toUpperCase());
+    }
+
+    @GetMapping("/status/{status}")
+    public Optional<List<FormulaEntity>> getFormulaByStatus(@PathVariable String status) {
+        return formulaRepository.findAllByStatus(status);
     }
 
     private String rateLimitFallback(String formulaName,

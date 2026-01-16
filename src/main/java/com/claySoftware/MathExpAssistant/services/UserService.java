@@ -21,7 +21,8 @@ public class UserService {
 
     }
 
-    public UserEntity upsertOAuthUser(String sub, String email, String name, String pictureUrl, String plan) {
+    public UserEntity upsertOAuthUser(String sub, String email, String name, String pictureUrl, String plan,
+            String role) {
         return userRepository.findByProviderUserId(sub)
                 .map(u -> {
                     u.setPlan(UserPlan.valueOf(plan));

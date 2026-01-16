@@ -35,6 +35,7 @@ public class UserEntity {
     private Instant createdAt;
     private Instant updatedAt;
     private Instant lastLoginAt;
+    private String role;
 
     // getters/setters
 }

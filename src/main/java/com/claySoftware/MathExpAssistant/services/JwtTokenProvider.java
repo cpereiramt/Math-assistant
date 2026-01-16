@@ -49,8 +49,9 @@ public class JwtTokenProvider {
                     "Unexpected principal type: " + authentication.getPrincipal().getClass());
         }
         UserPlan effectivePlan = adminBypass.effectivePlan(email);
+        String role = adminBypass.isAdminEmail(email) ? "ADMIN" : "USER";
 
-        userService.upsertOAuthUser(sub, email, username, pictureUrl, effectivePlan.name());
+        userService.upsertOAuthUser(sub, email, username, pictureUrl, effectivePlan.name(), role);
 
         return Jwts.builder()
                 .setSubject(username)

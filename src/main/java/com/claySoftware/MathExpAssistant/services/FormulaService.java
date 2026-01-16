@@ -30,11 +30,14 @@ public class FormulaService {
     }
 
     public String insertNewFormula(FormulaEntity formulaEntity) {
-        FormulaEntity isFormulaDifferentOfNull =  formulaRepository.save(formulaEntity);
-        if(isFormulaDifferentOfNull.getId() != null)  {
-            return "new formula successful saved";
+        
+        FormulaEntity existingFormula = formulaRepository.findByName(formulaEntity.getName()).orElse(null);
+        
+        if (existingFormula != null && existingFormula.getId() != null) {
+            return "Formula already exists";
         }
-        return "Error when trying to save";
+        FormulaEntity newFormula = formulaRepository.save(formulaEntity);
+        return "new formula successful saved";
     }
 }
 
