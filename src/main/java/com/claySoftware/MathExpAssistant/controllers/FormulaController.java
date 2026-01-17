@@ -21,6 +21,7 @@ import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.bulkhead.BulkheadFullException;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import com.claySoftware.MathExpAssistant.utils.AdminBypass;
+import com.claySoftware.MathExpAssistant.utils.FormulaNormalizer;
 
 @RestController
 @RequestMapping("/api/formulas")
@@ -45,14 +46,18 @@ public class FormulaController {
             @RequestBody Map<String, Double> variables) throws ScriptException {
         // TODO : Implement the logic to use some ai mathematics model when the formula
         // is not found on database
-        return formulaService.executeFormula(formulaName.toUpperCase(), variables);
+        Map<String, Double> normalizedVars = FormulaNormalizer.normalizeVariables(variables);
+        return formulaService.executeFormula(formulaName.toUpperCase(), normalizedVars);
     }
 
     @PostMapping("/insert")
     @RateLimiter(name = "publicApi", fallbackMethod = "insertRateLimitFallback")
     @Bulkhead(name = "publicApi", fallbackMethod = "insertBulkheadFallback")
     public String createNewFormula(@RequestBody @Validated FormulaEntity formulaEntity) {
-
+        String normalizedEquation = FormulaNormalizer.normalizeEquation(formulaEntity.getEquation());
+        List<String> normalizeParameters = FormulaNormalizer.normalizeParameters(formulaEntity.getParameters());
+        formulaEntity.setParameters(normalizeParameters);
+        formulaEntity.setEquation(normalizedEquation);
         formulaEntity.setStatus(FormulaStatus.UNDER_REVIEW);
         formulaEntity.setName(formulaEntity.getName().toUpperCase());
         return formulaService.insertNewFormula(formulaEntity);
@@ -61,7 +66,7 @@ public class FormulaController {
     @DeleteMapping("/delete/{id}")
     public String deleteFormula(@PathVariable String id, Authentication authentication) {
         Optional<FormulaEntity> formulaToDelete = formulaRepository.findById(id);
-        String  email = (String) authentication.getName();
+        String email = (String) authentication.getName();
 
         if (!adminBypass.isAdminEmail(email)) {
             return "Access denied";
@@ -78,8 +83,7 @@ public class FormulaController {
     @RateLimiter(name = "publicApi", fallbackMethod = "getAllRateLimitFallback")
     @Bulkhead(name = "publicApi", fallbackMethod = "getAllBulkheadFallback")
     public List<FormulaEntity> getAllFormula() {
-        Optional<List<FormulaEntity>> formulaList = formulaRepository.findAllByStatus("PUBLIC");
-        return formulaList.get();
+        return formulaRepository.findAllByStatus("PUBLIC").orElse(List.of());
     }
 
     @GetMapping("/name/{name}")
@@ -89,7 +93,7 @@ public class FormulaController {
 
     @GetMapping("/status/{status}")
     public Optional<List<FormulaEntity>> getFormulaByStatus(@PathVariable String status) {
-        return formulaRepository.findAllByStatus(status);
+        return formulaRepository.findAllByStatus(status.toUpperCase());
     }
 
     private String rateLimitFallback(String formulaName,
