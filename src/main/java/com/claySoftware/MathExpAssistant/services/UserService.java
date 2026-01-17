@@ -27,6 +27,7 @@ public class UserService {
                 .map(u -> {
                     u.setPlan(UserPlan.valueOf(plan));
                     u.setLastLoginAt(Instant.now());
+                    u.setRole(role);
                     u.setUpdatedAt(Instant.now());
                     return userRepository.save(u);
                 })
@@ -36,6 +37,7 @@ public class UserService {
                     u.setProviderUserId(sub);
                     u.setEmail(email);
                     u.setName(name);
+                    u.setRole(role);
                     u.setPlan(UserPlan.valueOf(plan));
                     u.setPictureUrl(pictureUrl);
                     u.setCreatedAt(Instant.now());

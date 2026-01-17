@@ -17,7 +17,6 @@ public class AdminBypass {
 
     public boolean isAdminEmail(String email) {
         String ADMIN_EMAIL = this.environment.getProperty("ADMIN_CREDS");
-        System.out.println("Admin email: " + ADMIN_EMAIL);
         return ADMIN_EMAIL.equalsIgnoreCase(email);
     }
 
