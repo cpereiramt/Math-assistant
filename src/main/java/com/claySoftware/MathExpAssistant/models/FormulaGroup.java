@@ -4,5 +4,6 @@ public enum FormulaGroup {
     ARITHMETIC,
     TRIGONOMETRY,
     ALGEBRA,
-    PERCENTAGE
+    PERCENTAGE,
+    GEOMETRY,
 }
