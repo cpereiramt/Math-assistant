@@ -12,15 +12,17 @@ import org.springframework.stereotype.Component;
 import com.claySoftware.MathExpAssistant.services.JwtTokenProvider;
 
 import java.io.IOException;
-import java.util.Map;
+import org.springframework.core.env.Environment;
 
 @Component
 public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final Environment environment;
 
-    public OAuth2LoginSuccessHandler(JwtTokenProvider jwtTokenProvider) {
+    public OAuth2LoginSuccessHandler(JwtTokenProvider jwtTokenProvider, Environment environment) {
         this.jwtTokenProvider = jwtTokenProvider;
+        this.environment = environment;
     }
 
     @Override
@@ -28,12 +30,13 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
             HttpServletRequest request,
             HttpServletResponse response,
             Authentication authentication) throws IOException, ServletException {
-
+        String token = null;
         if (authentication.getPrincipal() instanceof OidcUser oidcUser) {
-            jwtTokenProvider.createToken(authentication);
+            token = jwtTokenProvider.createToken(authentication);
         }
+        String FRONTEND_BASE_URL = this.environment.getProperty("FRONTEND_BASE_URL");
 
         response.setStatus(HttpServletResponse.SC_OK);
-        response.sendRedirect("/docs"); // ajuste conforme seu fluxo
+        response.sendRedirect(FRONTEND_BASE_URL + "/auth/callback?token=" + token); // ajuste conforme seu fluxo
     }
 }
