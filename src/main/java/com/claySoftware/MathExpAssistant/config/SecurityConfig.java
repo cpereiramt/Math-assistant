@@ -69,11 +69,10 @@ public class SecurityConfig {
                                                 .defaultAuthenticationEntryPointFor(
                                                                 apiEntryPoint,
                                                                 new AntPathRequestMatcher("/auth/token"))
-                                                        )
+                                                        
                                                   .defaultAuthenticationEntryPointFor(
-                                                        new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
-                                                        new AntPathRequestMatcher("/api/**")
-      )
+                                                        apiEntryPoint,                                                        
+                                                        new AntPathRequestMatcher("/api/**")))
                                 .oauth2Login(oauth2 -> oauth2.successHandler(successHandler));
 
                 http.addFilterBefore(
