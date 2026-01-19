@@ -30,9 +30,9 @@ public class SecurityConfig {
 
                 http
                                 .csrf(csrf -> csrf.disable())
-                                .cors(cors -> {
-                                })
+                                .cors(Customizer.withDefaults())
                                 .authorizeHttpRequests(auth -> auth
+                                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                                                 // Swagger + OpenAPI
                                                 .requestMatchers(
                                                                 "/docs/**",
@@ -71,5 +71,19 @@ public class SecurityConfig {
 
                 return http.build();
         }
+
+  @Bean
+  public CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration config = new CorsConfiguration();
+    config.setAllowedOrigins(List.of("https://math-assistant.claytonpereira.com"));
+    config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+    config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin"));
+    config.setAllowCredentials(true);
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", config);
+    return source;
+  }
+}
 
 }
