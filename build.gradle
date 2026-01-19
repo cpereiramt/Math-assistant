@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'com.claySoftware'
-version = '0.4.2'
+version = '1.0.0'
 
 java {
 	sourceCompatibility = '21'
