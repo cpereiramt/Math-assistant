@@ -10,8 +10,9 @@ public class GlobalCorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**") // For all routes development
-                .allowedOrigins("*") // Localhost for development
-                .allowedMethods("*") // Allowed all http methods for development
-                .allowedHeaders("*") ;// Allowed all header for development
+                .allowedOrigins("https://math-assistant.claytonpereira.com") // Localhost for development
+                .allowedMethods("GET, POST, PUT, DELETE", "OPTIONS") // Allowed all http methods for development
+                .allowedHeaders("Authorization", "Content-Type", "Accept", "Origin")
+                .allowCredentials(true); 
     }
 }
