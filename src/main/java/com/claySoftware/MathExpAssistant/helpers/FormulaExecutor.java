@@ -2,17 +2,17 @@ package com.claySoftware.MathExpAssistant.helpers;
 
 import net.objecthunter.exp4j.Expression;
 import net.objecthunter.exp4j.ExpressionBuilder;
-
-
+import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
+@Component
 public class FormulaExecutor {
 
+    public FormulaExecutor() {
+    }
 
-    public FormulaExecutor() {}
-
-    public double executeFormula(String equation, Map<String, Double> variables)  {
+    public double executeFormula(String equation, Map<String, Double> variables) {
 
         Expression expression = new ExpressionBuilder(equation)
                 .variables(variables.keySet())
@@ -25,4 +25,3 @@ public class FormulaExecutor {
         return expression.evaluate();
     }
 }
-
