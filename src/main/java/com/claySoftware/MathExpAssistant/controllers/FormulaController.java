@@ -1,6 +1,7 @@
 package com.claySoftware.MathExpAssistant.controllers;
 
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
+import com.claySoftware.MathExpAssistant.models.ExecuteFormulaRequest;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.services.FormulaService;
@@ -42,20 +43,20 @@ public class FormulaController {
     @RateLimiter(name = "publicApi", fallbackMethod = "rateLimitFallback")
     @Bulkhead(name = "publicApi", fallbackMethod = "bulkheadFallback")
     public String executeFormula(
-            @RequestParam String formulaName,
-            @RequestBody Map<String, Double> variables) throws ScriptException {
+            @RequestBody ExecuteFormulaRequest request) throws ScriptException {
         // TODO : Implement the logic to use some ai mathematics model when the formula
         // is not found on database
-        Map<String, Double> normalizedVars = FormulaNormalizer.normalizeVariables(variables);
-        return formulaService.executeFormula(formulaName.toUpperCase(), normalizedVars);
+        return formulaService.executeFormula(request);
     }
 
     @PostMapping("/insert")
     @RateLimiter(name = "publicApi", fallbackMethod = "insertRateLimitFallback")
     @Bulkhead(name = "publicApi", fallbackMethod = "insertBulkheadFallback")
     public String createNewFormula(@RequestBody @Validated FormulaEntity formulaEntity) {
-        String normalizedEquation = FormulaNormalizer.normalizeEquation(formulaEntity.getEquation());
-        List<String> normalizeParameters = FormulaNormalizer.normalizeParameters(formulaEntity.getParameters());
+        String normalizedEquation = FormulaNormalizer
+                .normalizeEquation(formulaEntity.getEquation() == null ? "" : formulaEntity.getEquation());
+        List<String> normalizeParameters = FormulaNormalizer
+                .normalizeParameters(formulaEntity.getParameters() == null ? List.of() : formulaEntity.getParameters());
         formulaEntity.setParameters(normalizeParameters);
         formulaEntity.setEquation(normalizedEquation);
         formulaEntity.setStatus(FormulaStatus.UNDER_REVIEW);
@@ -96,16 +97,14 @@ public class FormulaController {
         return formulaRepository.findAllByStatus(status.toUpperCase());
     }
 
-    private String rateLimitFallback(String formulaName,
-            Map<String, Double> variables,
+    private String rateLimitFallback(ExecuteFormulaRequest request,
             RequestNotPermitted ex) {
         throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
                 "Too Many Requests", ex);
     }
 
-    private String bulkheadFallback(String formulaName,
-            Map<String, Double> variables,
+    private String bulkheadFallback(ExecuteFormulaRequest request,
             BulkheadFullException ex) {
         throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
