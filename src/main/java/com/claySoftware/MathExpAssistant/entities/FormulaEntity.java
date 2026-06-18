@@ -31,6 +31,5 @@ public class FormulaEntity {
     private boolean variable;
     private int minParameters;
     private int maxParameters;
-    private String operator;
 
 }

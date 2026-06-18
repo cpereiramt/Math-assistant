@@ -3,13 +3,10 @@ package com.claySoftware.MathExpAssistant.services;
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
 import com.claySoftware.MathExpAssistant.helpers.EquationBuilder;
 import com.claySoftware.MathExpAssistant.helpers.FormulaExecutor;
-import com.claySoftware.MathExpAssistant.helpers.VariadicValidator;
 import com.claySoftware.MathExpAssistant.models.ExecuteFormulaRequest;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import javax.script.ScriptException;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.List;
@@ -111,8 +108,8 @@ public class FormulaService {
             return "validation_error: values is required for variadic formulas";
         }
 
-        if (formula.getOperator() == null || formula.getOperator().isBlank()) {
-            return "server_error: variadic formula missing operator configuration";
+        if (formula.getEquation() == null || formula.getEquation().isBlank()) {
+            return "server_error: variadic formula missing equation configuration";
         }
 
         // (Opcional) validar min/max se existirem
@@ -130,7 +127,7 @@ public class FormulaService {
         Map<String, Double> vars;
 
         try {
-            equation = EquationBuilder.buildVariadicEquation(formula.getOperator().trim(), values.size());
+            equation = EquationBuilder.buildVariadicEquation(formula.getEquation(), values.size());
             vars = VariableBuilder.buildVariables(values);
         } catch (Exception e) {
             return "validation_error: " + e.getMessage();

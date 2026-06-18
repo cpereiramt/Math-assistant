@@ -6,4 +6,7 @@ public enum FormulaGroup {
     ALGEBRA,
     PERCENTAGE,
     GEOMETRY,
+    FINANCIAL,
+    PHYSICS,
+    STATISTICS,
 }
