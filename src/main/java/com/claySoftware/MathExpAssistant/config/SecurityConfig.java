@@ -1,6 +1,7 @@
 package com.claySoftware.MathExpAssistant.config;
 
 import com.claySoftware.MathExpAssistant.services.JwtTokenProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -17,6 +18,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.security.config.Customizer;
 import org.springframework.http.HttpMethod;
+import java.util.Arrays;
 import java.util.List;
 
 @Configuration
@@ -24,9 +26,13 @@ import java.util.List;
 public class SecurityConfig {
 
         private final JwtTokenProvider jwtTokenProvider;
+        private final String allowedCorsOrigins;
 
-        public SecurityConfig(JwtTokenProvider jwtTokenProvider) {
+        public SecurityConfig(
+                        JwtTokenProvider jwtTokenProvider,
+                        @Value("${app.cors.allowed-origins}") String allowedCorsOrigins) {
                 this.jwtTokenProvider = jwtTokenProvider;
+                this.allowedCorsOrigins = allowedCorsOrigins;
         }
 
         @Bean
@@ -85,7 +91,10 @@ public class SecurityConfig {
   @Bean
   public CorsConfigurationSource corsConfigurationSource() {
     CorsConfiguration config = new CorsConfiguration();
-    config.setAllowedOrigins(List.of("https://math-assistant.claytonpereira.com"));
+    config.setAllowedOrigins(Arrays.stream(allowedCorsOrigins.split(","))
+        .map(String::trim)
+        .filter(origin -> !origin.isBlank())
+        .toList());
     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin"));
     config.setAllowCredentials(true);

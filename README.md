@@ -89,22 +89,21 @@ O backend agora suporta **fórmulas fixas** e **fórmulas variádicas (número d
 * `variable = false`
 * `equation` obrigatória
 * `parameters` obrigatório e não vazio
-* `operator` não deve ser utilizado
 
 ---
 
 ### Fórmulas Variádicas
 
 * Aceitam quantidade variável de valores
-* A equação é montada dinamicamente em runtime
-* Indicadas para operações como soma e multiplicação
+* A equação é armazenada no banco e pode usar `{VALUES}` para receber todos os valores enviados
+* Indicadas para operações como soma, média, mínimo e máximo
 
 ```json
 {
   "name": "ADDITION",
   "group": "ARITHMETIC",
   "variable": true,
-  "operator": "+",
+  "equation": "SUM({VALUES})",
   "minParams": 1,
   "status": "PUBLIC"
 }
@@ -113,8 +112,8 @@ O backend agora suporta **fórmulas fixas** e **fórmulas variádicas (número d
 **Regras:**
 
 * `variable = true`
-* `operator` obrigatório (`+`, `*`, etc.)
-* `equation` não é obrigatória
+* `equation` obrigatória
+* Use `{VALUES}` quando a função precisar receber todos os itens de `values`
 * `parameters` não deve ser utilizada
 * `minParams` / `maxParams` são opcionais
 
@@ -181,7 +180,7 @@ Exemplos:
 
 ### Fórmulas Variádicas
 
-* `operator` obrigatório
+* `equation` obrigatória
 * `values` obrigatório
 * `minParams >= 1` (quando informado)
 * `maxParams >= minParams` (quando informado)
@@ -238,7 +237,7 @@ Este documento descreve a arquitetura e os requisitos do sistema de assistente d
 
 * Spring Boot para APIs RESTful.
 * MongoDB para persistência de fórmulas.
-* exp4j para avaliação de expressões matemáticas.
+* EvalEx para avaliação de expressões matemáticas.
 
 ## 5. Fluxo de Trabalho
 

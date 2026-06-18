@@ -1,9 +1,11 @@
 package com.claySoftware.MathExpAssistant.helpers;
 
-import net.objecthunter.exp4j.Expression;
-import net.objecthunter.exp4j.ExpressionBuilder;
+import com.ezylang.evalex.Expression;
+import com.ezylang.evalex.EvaluationException;
+import com.ezylang.evalex.parser.ParseException;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.Map;
 
 @Component
@@ -14,14 +16,15 @@ public class FormulaExecutor {
 
     public double executeFormula(String equation, Map<String, Double> variables) {
 
-        Expression expression = new ExpressionBuilder(equation)
-                .variables(variables.keySet())
-                .build();
-        // passing the values of variables
+        Expression expression = new Expression(equation);
         for (Map.Entry<String, Double> entry : variables.entrySet()) {
-            expression.setVariable(entry.getKey(), entry.getValue());
+            expression.with(entry.getKey(), BigDecimal.valueOf(entry.getValue()));
         }
 
-        return expression.evaluate();
+        try {
+            return expression.evaluate().getNumberValue().doubleValue();
+        } catch (EvaluationException | ParseException e) {
+            throw new IllegalArgumentException("Invalid equation: " + e.getMessage(), e);
+        }
     }
 }

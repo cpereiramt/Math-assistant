@@ -24,6 +24,7 @@ public class FormulaEntity {
     private FormulaGroup group;
 
     private String equation;
+    private String displayEquation;
 
     private List<String> parameters;
 
@@ -31,6 +32,5 @@ public class FormulaEntity {
     private boolean variable;
     private int minParameters;
     private int maxParameters;
-    private String operator;
 
 }

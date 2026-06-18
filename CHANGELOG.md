@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Changed
+- Substituído: motor de execução de fórmulas de `exp4j` para `EvalEx`.
+- Removido: campo `operator` da lógica de fórmulas variádicas; agora elas usam `equation`.
+
 ##  [1.1.0] - 2026-01-25
 ### Added
 - Adicionando: suporte para fórmulas variádicas (Feat: adding support for variadic formulas).
