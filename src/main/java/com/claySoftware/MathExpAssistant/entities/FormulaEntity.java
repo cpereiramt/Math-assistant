@@ -24,6 +24,7 @@ public class FormulaEntity {
     private FormulaGroup group;
 
     private String equation;
+    private String displayEquation;
 
     private List<String> parameters;
 
