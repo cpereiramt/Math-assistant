@@ -52,7 +52,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         .parseClaimsJws(token)
                         .getBody();
 
-                String username = claims.getSubject();
+                String username = claims.get("email", String.class);
+                if (username == null || username.isBlank()) {
+                    username = claims.getSubject();
+                }
                 User user = new User(username, "", Collections.emptyList());
 
                 UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(user, token,
