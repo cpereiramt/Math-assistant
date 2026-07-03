@@ -2,6 +2,30 @@
 
 ## Quick Start
 
+### Atualizar índices da collection de fórmulas
+
+Depois de subir o MongoDB local ou depois de puxar mudanças da feature de Formula Builder, atualize os índices da collection `formulas`.
+
+Opção recomendada usando MongoDB Compass:
+
+1. Abra o MongoDB Compass.
+2. Conecte no MongoDB local.
+3. Abra um Playground.
+4. Cole ou abra o arquivo `scripts/update-formula-indexes.compass.js`.
+5. Execute o script contra o database `mathAssistant`.
+
+O script remove o índice antigo `unique_name_group` quando ele existir e garante o novo índice único `unique_formula_scope`:
+
+```javascript
+{ name: 1, group: 1, status: 1, ownerUserId: 1 }
+```
+
+Opção alternativa via PowerShell/Docker:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\update-formula-indexes.ps1
+```
+
 Siga estes passos rápidos para compilar, executar e testar o backend localmente (Windows):
 
 ### Preparar banco de dados local (Docker)
