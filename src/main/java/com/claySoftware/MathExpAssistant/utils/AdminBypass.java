@@ -17,7 +17,7 @@ public class AdminBypass {
 
     public boolean isAdminEmail(String email) {
         String ADMIN_EMAIL = this.environment.getProperty("ADMIN_CREDS");
-        return ADMIN_EMAIL.equalsIgnoreCase(email);
+        return ADMIN_EMAIL != null && email != null && ADMIN_EMAIL.equalsIgnoreCase(email);
     }
 
     public UserPlan effectivePlan(String email) {

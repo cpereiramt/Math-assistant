@@ -48,13 +48,14 @@ public class JwtTokenProvider {
             throw new IllegalArgumentException(
                     "Unexpected principal type: " + authentication.getPrincipal().getClass());
         }
-        UserPlan effectivePlan = adminBypass.effectivePlan(sub);
-        String role = adminBypass.isAdminEmail(sub) ? "ADMIN" : "USER";
+        UserPlan effectivePlan = adminBypass.effectivePlan(email);
+        String role = adminBypass.isAdminEmail(email) ? "ADMIN" : "USER";
 
         userService.upsertOAuthUser(sub, email, username, pictureUrl, effectivePlan.name(), role);
 
         return Jwts.builder()
-                .setSubject(username)
+                .setSubject(email)
+                .claim("name", username)
                 .claim("email", email)
                 .claim("plan", effectivePlan.name())
                 .claim("role", role)

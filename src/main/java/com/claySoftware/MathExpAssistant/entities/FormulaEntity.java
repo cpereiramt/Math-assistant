@@ -9,10 +9,11 @@ import lombok.Setter;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
+import java.time.Instant;
 import java.util.List;
 
 @Document(collection = "formulas")
-@CompoundIndex(name = "unique_name_group", def = "{'name': 1, 'group': 1}", unique = true)
+@CompoundIndex(name = "unique_formula_scope", def = "{'name': 1, 'group': 1, 'status': 1, 'ownerUserId': 1}", unique = true)
 @Getter
 @Setter
 public class FormulaEntity {
@@ -23,6 +24,8 @@ public class FormulaEntity {
 
     private FormulaGroup group;
 
+    private String description;
+
     private String equation;
     private String displayEquation;
 
@@ -30,7 +33,12 @@ public class FormulaEntity {
 
     private FormulaStatus status;
     private boolean variable;
-    private int minParameters;
-    private int maxParameters;
+    private Integer minParameters;
+    private Integer maxParameters;
+
+    private String ownerUserId;
+    private String ownerEmail;
+    private Instant createdAt;
+    private Instant updatedAt;
 
 }
