@@ -4,9 +4,13 @@ import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
 import com.claySoftware.MathExpAssistant.helpers.EquationBuilder;
 import com.claySoftware.MathExpAssistant.helpers.FormulaExecutor;
 import com.claySoftware.MathExpAssistant.helpers.FormulaValidator;
+import com.claySoftware.MathExpAssistant.helpers.FormulaTreeCompiler;
 import com.claySoftware.MathExpAssistant.helpers.VariableBuilder;
 import com.claySoftware.MathExpAssistant.models.ExecuteFormulaRequest;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
+import com.claySoftware.MathExpAssistant.models.FormulaCompilationResult;
+import com.claySoftware.MathExpAssistant.models.FormulaInputMode;
+import com.claySoftware.MathExpAssistant.models.FormulaPreviewRequest;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.utils.FormulaNormalizer;
 import org.springframework.stereotype.Service;
@@ -23,18 +27,27 @@ public class FormulaService {
     private final FormulaRepository formulaRepository;
     private final FormulaExecutor formulaExecutor;
     private final FormulaValidator validator;
+    private final FormulaTreeCompiler treeCompiler;
 
     public FormulaService(
             FormulaExecutor formulaExecutor,
             FormulaRepository formulaRepository,
-            FormulaValidator validator) {
+            FormulaValidator validator,
+            FormulaTreeCompiler treeCompiler) {
         this.formulaExecutor = formulaExecutor;
         this.formulaRepository = formulaRepository;
         this.validator = validator;
+        this.treeCompiler = treeCompiler;
     }
 
     public List<FormulaEntity> listPublicFormulas() {
         return formulaRepository.findAllByStatus(FormulaStatus.PUBLIC);
+    }
+
+    public List<FormulaEntity> listBuilderCatalog() {
+        return listPublicFormulas().stream()
+                .filter(formula -> !formula.isVariable())
+                .toList();
     }
 
     public List<FormulaEntity> listUserFormulas(String ownerUserId) {
@@ -112,12 +125,44 @@ public class FormulaService {
         normalizeFormula(formulaEntity);
         formulaEntity.setVariable(false);
         formulaEntity.setStatus(FormulaStatus.PRIVATE);
+        String preparationError = prepareFormulaInput(formulaEntity);
+        if (preparationError != null) {
+            return preparationError;
+        }
         return validateCustomFormula(formulaEntity);
+    }
+
+    public Map<String, Object> previewUserFormula(FormulaPreviewRequest request) {
+        if (request == null || request.getFormula() == null) {
+            return Map.of("valid", false, "message", "formula is required");
+        }
+        FormulaEntity formula = request.getFormula();
+        String validationError = validateUserFormula(formula);
+        if (validationError != null) {
+            return Map.of("valid", false, "message", validationError);
+        }
+
+        String result = executeFixed(formula, request.getVariables());
+        if (result.startsWith("validation_error:") || result.startsWith("calculation_error:")
+                || result.startsWith("server_error:")) {
+            return Map.of("valid", false, "message", result);
+        }
+        return Map.of(
+                "valid", true,
+                "equation", formula.getEquation(),
+                "displayEquation", formula.getDisplayEquation(),
+                "parameters", formula.getParameters(),
+                "result", Double.valueOf(result));
     }
 
     public String insertUserFormula(FormulaEntity formulaEntity, String ownerUserId, String ownerEmail) {
         normalizeFormula(formulaEntity);
         prepareCustomFormulaForOwner(formulaEntity, ownerUserId, ownerEmail);
+
+        String preparationError = prepareFormulaInput(formulaEntity);
+        if (preparationError != null) {
+            return "validation_error: " + preparationError;
+        }
 
         String validationError = validateCustomFormula(formulaEntity);
         if (validationError != null) {
@@ -153,6 +198,10 @@ public class FormulaService {
 
         normalizeFormula(formulaEntity);
         prepareCustomFormulaForOwner(formulaEntity, ownerUserId, ownerEmail);
+        String preparationError = prepareFormulaInput(formulaEntity);
+        if (preparationError != null) {
+            return "validation_error: " + preparationError;
+        }
         formulaEntity.setId(id);
         formulaEntity.setCreatedAt(existing.get().getCreatedAt());
         formulaEntity.setUpdatedAt(Instant.now());
@@ -298,6 +347,36 @@ public class FormulaService {
         formula.setVariable(false);
         formula.setMinParameters(null);
         formula.setMaxParameters(null);
+    }
+
+    private String prepareFormulaInput(FormulaEntity formula) {
+        FormulaInputMode mode = formula.getInputMode();
+        if (mode == null) {
+            mode = formula.getExpressionTree() == null ? FormulaInputMode.TEXT : FormulaInputMode.BUILDER;
+            formula.setInputMode(mode);
+        }
+
+        if (mode == FormulaInputMode.TEXT) {
+            formula.setExpressionTree(null);
+            formula.setSourceSnapshots(null);
+            formula.setBuilderVersion(null);
+            return null;
+        }
+        if (formula.getExpressionTree() == null) {
+            return "expressionTree is required in BUILDER mode";
+        }
+
+        try {
+            FormulaCompilationResult compiled = treeCompiler.compile(formula.getExpressionTree());
+            formula.setEquation(compiled.equation());
+            formula.setDisplayEquation(compiled.displayEquation());
+            formula.setParameters(compiled.parameters());
+            formula.setSourceSnapshots(compiled.sourceSnapshots());
+            formula.setBuilderVersion(1);
+            return null;
+        } catch (IllegalArgumentException ex) {
+            return ex.getMessage();
+        }
     }
 
     private String validateCustomFormula(FormulaEntity formula) {
