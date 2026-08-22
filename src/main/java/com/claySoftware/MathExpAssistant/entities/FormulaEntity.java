@@ -2,6 +2,9 @@ package com.claySoftware.MathExpAssistant.entities;
 
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.models.FormulaGroup;
+import com.claySoftware.MathExpAssistant.models.FormulaExpressionNode;
+import com.claySoftware.MathExpAssistant.models.FormulaInputMode;
+import com.claySoftware.MathExpAssistant.models.FormulaSourceSnapshot;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -28,6 +31,11 @@ public class FormulaEntity {
 
     private String equation;
     private String displayEquation;
+
+    private FormulaInputMode inputMode;
+    private FormulaExpressionNode expressionTree;
+    private List<FormulaSourceSnapshot> sourceSnapshots;
+    private Integer builderVersion;
 
     private List<String> parameters;
 

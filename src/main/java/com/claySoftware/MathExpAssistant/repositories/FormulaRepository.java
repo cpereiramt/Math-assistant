@@ -13,6 +13,8 @@ public interface FormulaRepository extends MongoRepository<FormulaEntity, String
 
     Optional<FormulaEntity> findByNameAndStatus(String name, FormulaStatus status);
 
+    Optional<FormulaEntity> findByIdAndStatus(String id, FormulaStatus status);
+
     Optional<FormulaEntity> findByNameAndOwnerUserIdAndStatus(
             String name,
             String ownerUserId,

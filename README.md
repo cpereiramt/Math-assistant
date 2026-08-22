@@ -193,6 +193,80 @@ Exemplos:
 
 ---
 
+## Construtor híbrido de fórmulas privadas
+
+Fórmulas privadas aceitam duas formas de entrada no mesmo contrato:
+
+- `TEXT`: mantém o comportamento existente, usando `equation` e `parameters` digitados pelo usuário.
+- `BUILDER`: recebe `expressionTree`; o backend gera `equation`, `displayEquation`, `parameters` e snapshots das fórmulas públicas utilizadas. A equação enviada pelo cliente é ignorada nesse modo.
+
+Se `inputMode` não for informado, o backend usa `BUILDER` quando existir uma árvore e `TEXT` nos demais casos. Isso mantém compatibilidade com clientes anteriores.
+
+### Exemplo em modo texto
+
+```json
+{
+  "name": "DOBRO_MAIS_UM",
+  "group": "ALGEBRA",
+  "description": "Dobro de um valor mais um",
+  "inputMode": "TEXT",
+  "equation": "X * 2 + 1",
+  "parameters": ["X"]
+}
+```
+
+### Exemplo em modo visual
+
+```json
+{
+  "name": "AREA_DUPLA",
+  "group": "GEOMETRY",
+  "description": "Duas vezes uma fórmula pública de área",
+  "inputMode": "BUILDER",
+  "expressionTree": {
+    "id": "multiply-root",
+    "type": "OPERATOR",
+    "operator": "MULTIPLY",
+    "children": [
+      {
+        "id": "source-area",
+        "type": "FORMULA",
+        "sourceFormulaId": "ID_DA_FORMULA_PUBLICA",
+        "bindings": {
+          "WIDTH": {
+            "id": "width-variable",
+            "type": "VARIABLE",
+            "variableName": "BASE"
+          },
+          "HEIGHT": {
+            "id": "height-variable",
+            "type": "VARIABLE",
+            "variableName": "ALTURA"
+          }
+        }
+      },
+      {
+        "id": "constant-two",
+        "type": "CONSTANT",
+        "constantValue": "2"
+      }
+    ]
+  }
+}
+```
+
+Tipos de nó disponíveis: `FORMULA`, `OPERATOR`, `VARIABLE` e `CONSTANT`. Operadores disponíveis: `ADD`, `SUBTRACT`, `MULTIPLY`, `DIVIDE`, `POWER` e `NEGATE`.
+
+Endpoints auxiliares:
+
+- `GET /api/formulas/builder/catalog`: fórmulas públicas fixas disponíveis para arrastar.
+- `POST /api/formulas/mine/validate`: valida texto ou árvore sem salvar e retorna a equação compilada.
+- `POST /api/formulas/builder/preview`: valida e executa uma fórmula com valores de teste sem salvar.
+
+O preview recebe `{ "formula": { ... }, "variables": { "BASE": 10, "ALTURA": 5 } }`.
+
+Fórmulas variádicas ainda não podem ser usadas como blocos do construtor visual, mas continuam funcionando nos endpoints existentes.
+
 ## Validações Aplicadas no Backend
 
 ### Fórmulas Fixas

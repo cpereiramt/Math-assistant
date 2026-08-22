@@ -3,6 +3,7 @@ package com.claySoftware.MathExpAssistant.controllers;
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
 import com.claySoftware.MathExpAssistant.models.ExecuteFormulaRequest;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
+import com.claySoftware.MathExpAssistant.models.FormulaPreviewRequest;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.services.FormulaService;
 import com.claySoftware.MathExpAssistant.utils.AdminBypass;
@@ -123,9 +124,29 @@ public class FormulaController {
     public Map<String, Object> validateMyFormula(@RequestBody @Validated FormulaEntity formulaEntity) {
         String validationError = formulaService.validateUserFormula(formulaEntity);
         if (validationError == null) {
-            return Map.of("valid", true, "message", "formula is valid");
+            Map<String, Object> response = new java.util.LinkedHashMap<>();
+            response.put("valid", true);
+            response.put("message", "formula is valid");
+            response.put("inputMode", formulaEntity.getInputMode());
+            response.put("equation", formulaEntity.getEquation());
+            response.put("displayEquation", formulaEntity.getDisplayEquation());
+            response.put("parameters", formulaEntity.getParameters());
+            if (formulaEntity.getSourceSnapshots() != null) {
+                response.put("sourceSnapshots", formulaEntity.getSourceSnapshots());
+            }
+            return response;
         }
         return Map.of("valid", false, "message", validationError);
+    }
+
+    @GetMapping("/builder/catalog")
+    public List<FormulaEntity> getBuilderCatalog() {
+        return formulaService.listBuilderCatalog();
+    }
+
+    @PostMapping("/builder/preview")
+    public Map<String, Object> previewBuilderFormula(@RequestBody FormulaPreviewRequest request) {
+        return formulaService.previewUserFormula(request);
     }
 
     @DeleteMapping("/delete/{id}")
