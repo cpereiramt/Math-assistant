@@ -8,7 +8,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import java.util.List;
 import java.util.Optional;
 
-public interface FormulaRepository extends MongoRepository<FormulaEntity, String> {
+public interface FormulaRepository extends MongoRepository<FormulaEntity, String>, FormulaSearchRepository {
     Optional<FormulaEntity> findByName(String name);
 
     Optional<FormulaEntity> findByNameAndStatus(String name, FormulaStatus status);

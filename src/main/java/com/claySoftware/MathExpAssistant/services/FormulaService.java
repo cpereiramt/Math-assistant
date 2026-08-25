@@ -11,8 +11,15 @@ import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.models.FormulaCompilationResult;
 import com.claySoftware.MathExpAssistant.models.FormulaInputMode;
 import com.claySoftware.MathExpAssistant.models.FormulaPreviewRequest;
+import com.claySoftware.MathExpAssistant.models.FormulaGroup;
+import com.claySoftware.MathExpAssistant.models.FormulaSearchResponse;
+import com.claySoftware.MathExpAssistant.models.FormulaSearchScope;
+import com.claySoftware.MathExpAssistant.models.FormulaType;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.utils.FormulaNormalizer;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -52,6 +59,39 @@ public class FormulaService {
 
     public List<FormulaEntity> listUserFormulas(String ownerUserId) {
         return formulaRepository.findAllByOwnerUserIdAndStatus(ownerUserId, FormulaStatus.PRIVATE);
+    }
+
+    public FormulaSearchResponse searchFormulas(
+            String query,
+            List<FormulaGroup> groups,
+            FormulaType type,
+            FormulaSearchScope scope,
+            String ownerUserId,
+            int page,
+            int size,
+            String sortBy,
+            Sort.Direction direction) {
+        if (page < 0) {
+            throw new IllegalArgumentException("page must be greater than or equal to zero");
+        }
+        if (size < 1 || size > 100) {
+            throw new IllegalArgumentException("size must be between 1 and 100");
+        }
+
+        List<String> allowedSortFields = List.of("name", "createdAt", "updatedAt");
+        if (!allowedSortFields.contains(sortBy)) {
+            throw new IllegalArgumentException("sortBy must be one of: " + allowedSortFields);
+        }
+
+        FormulaSearchScope effectiveScope = scope == null ? FormulaSearchScope.PUBLIC : scope;
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
+        Page<FormulaEntity> result = formulaRepository.search(
+                query, groups, type, effectiveScope, ownerUserId, pageable);
+
+        return new FormulaSearchResponse(
+                result.getContent(), result.getNumber(), result.getSize(),
+                result.getTotalElements(), result.getTotalPages(),
+                sortBy + "," + direction.name().toLowerCase());
     }
 
     public Optional<FormulaEntity> getUserFormula(String id, String ownerUserId) {

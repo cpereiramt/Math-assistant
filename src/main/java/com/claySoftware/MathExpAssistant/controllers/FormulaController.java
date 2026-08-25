@@ -4,6 +4,10 @@ import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
 import com.claySoftware.MathExpAssistant.models.ExecuteFormulaRequest;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.models.FormulaPreviewRequest;
+import com.claySoftware.MathExpAssistant.models.FormulaGroup;
+import com.claySoftware.MathExpAssistant.models.FormulaSearchResponse;
+import com.claySoftware.MathExpAssistant.models.FormulaSearchScope;
+import com.claySoftware.MathExpAssistant.models.FormulaType;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.services.FormulaService;
 import com.claySoftware.MathExpAssistant.utils.AdminBypass;
@@ -17,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.data.domain.Sort;
 
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.bulkhead.BulkheadFullException;
@@ -67,6 +72,21 @@ public class FormulaController {
     @Bulkhead(name = "publicApi", fallbackMethod = "getAllBulkheadFallback")
     public List<FormulaEntity> getAllFormula() {
         return formulaService.listPublicFormulas();
+    }
+
+    @GetMapping("/search")
+    public FormulaSearchResponse searchFormulas(
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) List<FormulaGroup> groups,
+            @RequestParam(required = false) FormulaType type,
+            @RequestParam(defaultValue = "PUBLIC") FormulaSearchScope scope,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "name") String sortBy,
+            @RequestParam(defaultValue = "ASC") Sort.Direction direction,
+            Authentication authentication) {
+        return formulaService.searchFormulas(
+                q, groups, type, scope, currentUser(authentication), page, size, sortBy, direction);
     }
 
     @GetMapping("/name/{name}")

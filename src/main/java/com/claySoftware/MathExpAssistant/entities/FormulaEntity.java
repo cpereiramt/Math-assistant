@@ -11,12 +11,17 @@ import lombok.Setter;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.Instant;
 import java.util.List;
 
 @Document(collection = "formulas")
-@CompoundIndex(name = "unique_formula_scope", def = "{'name': 1, 'group': 1, 'status': 1, 'ownerUserId': 1}", unique = true)
+@CompoundIndexes({
+        @CompoundIndex(name = "unique_formula_scope", def = "{'name': 1, 'group': 1, 'status': 1, 'ownerUserId': 1}", unique = true),
+        @CompoundIndex(name = "formula_public_search", def = "{'status': 1, 'group': 1, 'variable': 1, 'name': 1}"),
+        @CompoundIndex(name = "formula_owner_search", def = "{'ownerUserId': 1, 'status': 1, 'group': 1, 'variable': 1, 'name': 1}")
+})
 @Getter
 @Setter
 public class FormulaEntity {
