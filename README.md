@@ -14,10 +14,13 @@ Opção recomendada usando MongoDB Compass:
 4. Cole ou abra o arquivo `scripts/update-formula-indexes.compass.js`.
 5. Execute o script contra o database `mathAssistant`.
 
-O script remove o índice antigo `unique_name_group` quando ele existir e garante o novo índice único `unique_formula_scope`:
+O script remove o índice antigo `unique_name_group` quando ele existir, garante o índice único
+`unique_formula_scope` e os índices usados pela busca paginada:
 
 ```javascript
 { name: 1, group: 1, status: 1, ownerUserId: 1 }
+{ status: 1, group: 1, variable: 1, name: 1 }
+{ ownerUserId: 1, status: 1, group: 1, variable: 1, name: 1 }
 ```
 
 Opção alternativa via PowerShell/Docker:
@@ -268,6 +271,28 @@ O preview recebe `{ "formula": { ... }, "variables": { "BASE": 10, "ALTURA": 5 }
 Fórmulas variádicas ainda não podem ser usadas como blocos do construtor visual, mas continuam funcionando nos endpoints existentes.
 
 ## Validações Aplicadas no Backend
+
+## Busca e filtros de fórmulas
+
+O endpoint abaixo pesquisa fórmulas públicas ou fórmulas privadas do usuário autenticado:
+
+```http
+GET /api/formulas/search?q=area&groups=GEOMETRY&type=FIXED&scope=PUBLIC&page=0&size=20&sortBy=name&direction=ASC
+```
+
+Filtros disponíveis:
+
+- `q`: trecho do nome, descrição ou equação de exibição.
+- `groups`: um ou mais grupos separados por vírgula, como `GEOMETRY,PHYSICS`.
+- `type`: `FIXED` para fórmulas fixas ou `VARIADIC` para fórmulas variádicas.
+- `scope`: `PUBLIC` ou `MINE`. Em `MINE`, o proprietário é obtido do JWT.
+- `page` e `size`: paginação baseada em zero; `size` aceita de 1 a 100.
+- `sortBy`: `name`, `createdAt` ou `updatedAt`.
+- `direction`: `ASC` ou `DESC`.
+
+Todos os filtros são opcionais. Os padrões são `scope=PUBLIC`, `page=0`, `size=20`,
+`sortBy=name` e `direction=ASC`. Os endpoints antigos de listagem continuam disponíveis
+para compatibilidade.
 
 ### Fórmulas Fixas
 

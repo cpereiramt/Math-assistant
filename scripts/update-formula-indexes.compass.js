@@ -15,5 +15,17 @@ formulas.createIndex(
   { name: "unique_formula_scope", unique: true }
 );
 
+formulas.createIndex(
+  { status: 1, group: 1, variable: 1, name: 1 },
+  { name: "formula_public_search" }
+);
+
+formulas.createIndex(
+  { ownerUserId: 1, status: 1, group: 1, variable: 1, name: 1 },
+  { name: "formula_owner_search" }
+);
+
 print("Ensured index: unique_formula_scope");
+print("Ensured index: formula_public_search");
+print("Ensured index: formula_owner_search");
 printjson(formulas.getIndexes());
