@@ -88,6 +88,30 @@ dotenv -e .env -- gradlew bootRun
 
 * Docker Compose suporta `env_file: .env` para que os containers leiam o mesmo arquivo.
 
+## Perfil do usuário autenticado
+
+O frontend pode carregar os dados do menu de perfil usando o endpoint protegido:
+
+```http
+GET /api/users/me
+Authorization: Bearer <token>
+```
+
+Resposta:
+
+```json
+{
+  "name": "Example User",
+  "email": "user@example.com",
+  "pictureUrl": "https://example.com/picture.jpg",
+  "plan": "FREE",
+  "role": "USER"
+}
+```
+
+O endpoint retorna `401` quando o token está ausente ou inválido e `404` quando o
+usuário autenticado não possui perfil persistido.
+
 ---
 
 ## 🔄 Atualizações Recentes – Modelo de Fórmulas
