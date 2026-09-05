@@ -6,11 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-### Changed
-- Substituído: motor de execução de fórmulas de `exp4j` para `EvalEx`.
-- Removido: campo `operator` da lógica de fórmulas variádicas; agora elas usam `equation`.
+No changes yet.
 
-##  [1.1.0] - 2026-01-25
+## [2.3.0] - 2026-09-05
+### Added
+- Adicionado o endpoint autenticado `GET /api/users/me` para retornar o contexto do usuário atual, incluindo nome, e-mail, imagem, plano e função.
+- Adicionado tratamento específico para usuário não encontrado no endpoint de perfil.
+- Adicionados testes do controller e do serviço para o contexto do usuário.
+
+## [2.2.0] - 2026-08-24
+### Added
+- Adicionado o endpoint `GET /api/formulas/search` com busca textual, filtros por grupo e tipo, escopo público ou do usuário, paginação e ordenação configurável.
+- Adicionado suporte a índices MongoDB para a busca de fórmulas, com scripts de atualização para Compass e PowerShell.
+- Adicionado contrato `FormulaSearchResponse` e tratamento de erros para consultas de busca inválidas.
+- Adicionados testes de serviço para os cenários de busca e filtragem.
+
+## [2.1.0] - 2026-08-22
+### Added
+- Adicionado builder visual de fórmulas com nós para variáveis, constantes, operadores e composição de fórmulas públicas.
+- Adicionados os endpoints `GET /api/formulas/builder/catalog` e `POST /api/formulas/builder/preview` para catálogo e pré-visualização de fórmulas.
+- Adicionada compilação de árvores de expressão com operadores aritméticos, validação de profundidade e limite de nós.
+- Adicionado registro das fórmulas públicas utilizadas na composição por meio de snapshots de origem.
+- Adicionada criação, consulta, atualização, exclusão, validação e execução de fórmulas privadas do usuário em `/api/formulas/mine`.
+- Adicionado controle de propriedade e acesso para impedir que usuários executem ou alterem fórmulas privadas de terceiros.
+- Adicionados testes para o compilador de árvores e para o fluxo híbrido de entrada de fórmulas.
+
+### Documentation
+- Documentado o processo de migração dos índices de fórmulas.
+- Atualizada a documentação com exemplos do builder visual e dos fluxos de fórmulas privadas.
+
+## [2.0.0] - 2026-06-17
+### Changed
+- Substituído o motor de execução de fórmulas de `exp4j` para `EvalEx` (`3.6.2`), mantendo o suporte a variáveis e propagando erros de parsing e avaliação como equações inválidas.
+- Atualizado o compilador de equações e as validações para o novo motor matemático.
+- Ajustado o modelo de fórmula para suportar os metadados necessários ao novo fluxo de execução.
+
+### Removed
+- Removido o campo `operator` da lógica de fórmulas variádicas; essas fórmulas passam a usar `equation`.
+- Removido o validador específico de fórmulas variádicas que deixou de ser necessário após a consolidação das validações.
+
+### Security
+- Ajustada a configuração de segurança para permitir os fluxos autenticados necessários à execução e ao gerenciamento de fórmulas.
+
+### Documentation
+- Adicionada documentação detalhada do projeto e atualizados os exemplos de execução e de fórmulas variádicas.
+
+## [1.1.0] - 2026-01-25
 ### Added
 - Adicionando: suporte para fórmulas variádicas (Feat: adding support for variadic formulas).
 - Adicionado: normalização de variáveis para fórmulas fixas (Feat: implementing variable normalization for fixed formulas).
