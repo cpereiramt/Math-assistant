@@ -1,12 +1,10 @@
 package com.claySoftware.MathExpAssistant.services;
 
-import org.springframework.data.mongodb.core.MongoTemplate;
-import org.springframework.data.mongodb.core.query.Criteria;
-import org.springframework.data.mongodb.core.query.Query;
-import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import com.claySoftware.MathExpAssistant.entities.UserEntity;
+import com.claySoftware.MathExpAssistant.exceptions.UserNotFoundException;
 import com.claySoftware.MathExpAssistant.models.UserPlan;
+import com.claySoftware.MathExpAssistant.models.UserProfileResponse;
 import com.claySoftware.MathExpAssistant.repositories.UserRepository;
 
 import java.time.Instant;
@@ -25,6 +23,10 @@ public class UserService {
             String role) {
         return userRepository.findByProviderUserId(sub)
                 .map(u -> {
+                    u.setProvider("google");
+                    u.setEmail(email);
+                    u.setName(name);
+                    u.setPictureUrl(pictureUrl);
                     u.setPlan(UserPlan.valueOf(plan));
                     u.setLastLoginAt(Instant.now());
                     u.setRole(role);
@@ -46,5 +48,21 @@ public class UserService {
 
                     return userRepository.save(u);
                 });
+    }
+
+    public UserProfileResponse getCurrentUserProfile(String email) {
+        if (email == null || email.isBlank()) {
+            throw new UserNotFoundException();
+        }
+
+        UserEntity user = userRepository.findByEmail(email)
+                .orElseThrow(UserNotFoundException::new);
+
+        return new UserProfileResponse(
+                user.getName(),
+                user.getEmail(),
+                user.getPictureUrl(),
+                user.getPlan(),
+                user.getRole());
     }
 }
