@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 No changes yet.
 
+## [2.4.0] - 2026-09-05
+### Added
+- Adicionada a camada social para fórmulas públicas, com votos positivos e negativos, métricas de avaliação e contagem de comentários.
+- Adicionados endpoints autenticados para publicar fórmulas privadas, votar, remover votos e gerenciar comentários e respostas.
+- Adicionados comentários hierárquicos com `parentCommentId`, respostas paginadas sob demanda e limite máximo de cinco níveis por thread.
+- Adicionado carregamento paginado de comentários raiz e respostas para evitar a renderização integral de árvores grandes.
+- Adicionada validação de autorização para impedir votos do proprietário na própria fórmula e alterações de comentários por usuários não autores.
+- Adicionados índices MongoDB para métricas sociais e integridade de votos únicos por usuário e fórmula.
+- Adicionados testes para votos, comentários, autorização, paginação e profundidade máxima das threads.
+
 ## [2.3.0] - 2026-09-05
 ### Added
 - Adicionado o endpoint autenticado `GET /api/users/me` para retornar o contexto do usuário atual, incluindo nome, e-mail, imagem, plano e função.

@@ -48,7 +48,7 @@ public class FormulaService {
     }
 
     public List<FormulaEntity> listPublicFormulas() {
-        return formulaRepository.findAllByStatus(FormulaStatus.PUBLIC);
+        return formulaRepository.findAllByStatusOrderByUpvotesDescAverageRatingDescCreatedAtDesc(FormulaStatus.PUBLIC);
     }
 
     public List<FormulaEntity> listBuilderCatalog() {
@@ -78,7 +78,9 @@ public class FormulaService {
             throw new IllegalArgumentException("size must be between 1 and 100");
         }
 
-        List<String> allowedSortFields = List.of("name", "createdAt", "updatedAt");
+        List<String> allowedSortFields = List.of(
+                "name", "createdAt", "updatedAt", "upvotes", "downvotes", "ratingCount",
+                "averageRating", "commentCount", "viewCount");
         if (!allowedSortFields.contains(sortBy)) {
             throw new IllegalArgumentException("sortBy must be one of: " + allowedSortFields);
         }
@@ -277,6 +279,20 @@ public class FormulaService {
 
         formulaRepository.delete(existing.get());
         return "custom formula deleted with success";
+    }
+
+    public String publishUserFormula(String id, String ownerUserId) {
+        Optional<FormulaEntity> existing = formulaRepository.findByIdAndOwnerUserIdAndStatus(
+                id, ownerUserId, FormulaStatus.PRIVATE);
+        if (existing.isEmpty()) {
+            return "not_found: custom formula not found for user";
+        }
+
+        FormulaEntity formula = existing.get();
+        formula.setStatus(FormulaStatus.PUBLIC);
+        formula.setUpdatedAt(Instant.now());
+        formulaRepository.save(formula);
+        return "custom formula published with success";
     }
 
     private String executeExistingFormula(FormulaEntity formula, ExecuteFormulaRequest req) {

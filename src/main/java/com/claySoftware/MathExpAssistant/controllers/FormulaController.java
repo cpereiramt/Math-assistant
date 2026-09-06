@@ -1,6 +1,11 @@
 package com.claySoftware.MathExpAssistant.controllers;
 
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
+import com.claySoftware.MathExpAssistant.entities.FormulaCommentEntity;
+import com.claySoftware.MathExpAssistant.models.FormulaCommentRequest;
+import com.claySoftware.MathExpAssistant.models.FormulaCommentUpdateRequest;
+import com.claySoftware.MathExpAssistant.models.FormulaCommentResponse;
+import com.claySoftware.MathExpAssistant.models.FormulaRatingRequest;
 import com.claySoftware.MathExpAssistant.models.ExecuteFormulaRequest;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.models.FormulaPreviewRequest;
@@ -10,6 +15,7 @@ import com.claySoftware.MathExpAssistant.models.FormulaSearchScope;
 import com.claySoftware.MathExpAssistant.models.FormulaType;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.services.FormulaService;
+import com.claySoftware.MathExpAssistant.services.FormulaSocialService;
 import com.claySoftware.MathExpAssistant.utils.AdminBypass;
 
 import org.springframework.http.HttpStatus;
@@ -22,6 +28,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import jakarta.validation.Valid;
 
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.bulkhead.BulkheadFullException;
@@ -33,15 +42,18 @@ import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 public class FormulaController {
 
     private final FormulaService formulaService;
+    private final FormulaSocialService formulaSocialService;
     private final FormulaRepository formulaRepository;
     private final AdminBypass adminBypass;
 
     public FormulaController(
             FormulaService formulaService,
+            FormulaSocialService formulaSocialService,
             FormulaRepository formulaRepository,
             AdminBypass adminBypass) {
         this.formulaRepository = formulaRepository;
         this.formulaService = formulaService;
+        this.formulaSocialService = formulaSocialService;
         this.adminBypass = adminBypass;
     }
 
@@ -138,6 +150,84 @@ public class FormulaController {
     @DeleteMapping("/mine/{id}")
     public String deleteMyFormula(@PathVariable String id, Authentication authentication) {
         return formulaService.deleteUserFormula(id, currentUser(authentication));
+    }
+
+    @PostMapping("/mine/{id}/publish")
+    public ResponseEntity<?> publishMyFormula(@PathVariable String id, Authentication authentication) {
+        String result = formulaService.publishUserFormula(id, currentUser(authentication));
+        if (result.startsWith("not_found:")) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(Map.of("message", result));
+    }
+
+    @PostMapping("/{formulaId}/ratings")
+    public FormulaEntity rateFormula(
+            @PathVariable String formulaId,
+            @Valid @RequestBody FormulaRatingRequest request,
+            Authentication authentication) {
+        if (request == null || request.value() == null) {
+            throw new IllegalArgumentException("rating value is required");
+        }
+        return formulaSocialService.rate(formulaId, currentUser(authentication), request.value());
+    }
+
+    @DeleteMapping("/{formulaId}/ratings")
+    public FormulaEntity removeFormulaRating(
+            @PathVariable String formulaId,
+            Authentication authentication) {
+        return formulaSocialService.removeRating(formulaId, currentUser(authentication));
+    }
+
+    @GetMapping("/{formulaId}/comments")
+    public Page<FormulaCommentResponse> listFormulaComments(
+            @PathVariable String formulaId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new IllegalArgumentException("page must be non-negative and size must be between 1 and 100");
+        }
+        return formulaSocialService.listComments(
+                formulaId, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+    }
+
+    @GetMapping("/{formulaId}/comments/{commentId}/replies")
+    public Page<FormulaCommentResponse> listCommentReplies(
+            @PathVariable String formulaId,
+            @PathVariable String commentId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new IllegalArgumentException("page must be non-negative and size must be between 1 and 100");
+        }
+        return formulaSocialService.listReplies(
+                formulaId, commentId, PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt")));
+    }
+
+    @PostMapping("/{formulaId}/comments")
+    public FormulaCommentEntity addFormulaComment(
+            @PathVariable String formulaId,
+            @Valid @RequestBody FormulaCommentRequest request,
+            Authentication authentication) {
+        return formulaSocialService.addComment(formulaId, currentUser(authentication), request);
+    }
+
+    @PatchMapping("/comments/{commentId}")
+    public FormulaCommentEntity updateFormulaComment(
+            @PathVariable String commentId,
+            @Valid @RequestBody FormulaCommentUpdateRequest request,
+            Authentication authentication) {
+        return formulaSocialService.updateComment(commentId, currentUser(authentication), request);
+    }
+
+    @DeleteMapping("/comments/{commentId}")
+    public ResponseEntity<Void> deleteFormulaComment(
+            @PathVariable String commentId,
+            Authentication authentication) {
+        formulaSocialService.deleteComment(commentId, currentUser(authentication));
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/mine/validate")
