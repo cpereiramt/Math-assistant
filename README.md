@@ -21,6 +21,17 @@ O script remove o índice antigo `unique_name_group` quando ele existir, garante
 { name: 1, group: 1, status: 1, ownerUserId: 1 }
 { status: 1, group: 1, variable: 1, name: 1 }
 { ownerUserId: 1, status: 1, group: 1, variable: 1, name: 1 }
+{ status: 1, upvotes: -1, averageRating: -1, createdAt: -1 }
+```
+
+As collections sociais também recebem os índices abaixo:
+
+```javascript
+// formula_ratings
+{ formulaId: 1, userId: 1 } // unique_formula_rating, único
+
+// formula_comments
+{ formulaId: 1, parentCommentId: 1, deleted: 1, createdAt: -1 } // formula_comment_thread
 ```
 
 Opção alternativa via PowerShell/Docker:

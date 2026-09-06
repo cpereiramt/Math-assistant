@@ -20,7 +20,8 @@ import java.util.List;
 @CompoundIndexes({
         @CompoundIndex(name = "unique_formula_scope", def = "{'name': 1, 'group': 1, 'status': 1, 'ownerUserId': 1}", unique = true),
         @CompoundIndex(name = "formula_public_search", def = "{'status': 1, 'group': 1, 'variable': 1, 'name': 1}"),
-        @CompoundIndex(name = "formula_owner_search", def = "{'ownerUserId': 1, 'status': 1, 'group': 1, 'variable': 1, 'name': 1}")
+        @CompoundIndex(name = "formula_owner_search", def = "{'ownerUserId': 1, 'status': 1, 'group': 1, 'variable': 1, 'name': 1}"),
+        @CompoundIndex(name = "formula_social_search", def = "{'status': 1, 'upvotes': -1, 'averageRating': -1, 'createdAt': -1}")
 })
 @Getter
 @Setter
@@ -53,5 +54,12 @@ public class FormulaEntity {
     private String ownerEmail;
     private Instant createdAt;
     private Instant updatedAt;
+
+    private long upvotes;
+    private long downvotes;
+    private long ratingCount;
+    private double averageRating;
+    private long commentCount;
+    private long viewCount;
 
 }
