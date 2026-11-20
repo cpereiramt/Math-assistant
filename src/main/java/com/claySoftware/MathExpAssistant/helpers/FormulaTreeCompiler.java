@@ -1,12 +1,15 @@
 package com.claySoftware.MathExpAssistant.helpers;
 
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
+import com.claySoftware.MathExpAssistant.entities.FormulaVersion;
 import com.claySoftware.MathExpAssistant.models.ExpressionOperator;
+import com.claySoftware.MathExpAssistant.models.ExpressionNodeType;
 import com.claySoftware.MathExpAssistant.models.FormulaCompilationResult;
 import com.claySoftware.MathExpAssistant.models.FormulaExpressionNode;
 import com.claySoftware.MathExpAssistant.models.FormulaSourceSnapshot;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
+import com.claySoftware.MathExpAssistant.repositories.FormulaVersionStore;
 import com.claySoftware.MathExpAssistant.utils.FormulaNormalizer;
 import org.springframework.stereotype.Component;
 
@@ -16,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -28,12 +32,19 @@ public class FormulaTreeCompiler {
 
     private final FormulaRepository formulaRepository;
 
-    public FormulaTreeCompiler(FormulaRepository formulaRepository) {
+    private final FormulaVersionStore versions;
+
+    public FormulaTreeCompiler(FormulaRepository formulaRepository, FormulaVersionStore versions) {
         this.formulaRepository = formulaRepository;
+        this.versions = versions;
     }
 
     public FormulaCompilationResult compile(FormulaExpressionNode root) {
-        CompilationContext context = new CompilationContext();
+        return compile(root, null);
+    }
+
+    public FormulaCompilationResult compile(FormulaExpressionNode root, FormulaEntity previous) {
+        CompilationContext context = new CompilationContext(previous);
         String equation = compileNode(root, context, 0);
         if (equation.length() > MAX_EQUATION_LENGTH) {
             throw new IllegalArgumentException("compiled equation exceeds the maximum length");
@@ -120,15 +131,11 @@ public class FormulaTreeCompiler {
         if (node.getSourceFormulaId() == null || node.getSourceFormulaId().isBlank()) {
             throw nodeError(node, "sourceFormulaId is required");
         }
-        FormulaEntity source = formulaRepository
-                .findByIdAndStatus(node.getSourceFormulaId(), FormulaStatus.PUBLIC)
-                .orElseThrow(() -> nodeError(node, "public source formula was not found"));
-        if (source.isVariable()) {
-            throw nodeError(node, "variadic formulas are not supported in the builder yet");
-        }
+        FormulaSourceSnapshot source = resolveSource(node, context);
         if (source.getEquation() == null || source.getParameters() == null) {
             throw nodeError(node, "source formula is incomplete");
         }
+        node.setSourceVersion(effectiveVersion(source));
 
         Map<String, FormulaExpressionNode> bindings = node.getBindings();
         if (bindings == null) {
@@ -151,9 +158,63 @@ public class FormulaTreeCompiler {
             }
         }
 
-        context.snapshots.putIfAbsent(source.getId(), new FormulaSourceSnapshot(
-                source.getId(), source.getName(), source.getEquation(), List.copyOf(source.getParameters())));
+        context.snapshots.putIfAbsent(FormulaVersion.key(source.getFormulaId(), effectiveVersion(source)), source);
         return "(" + expanded + ")";
+    }
+
+    private FormulaSourceSnapshot resolveSource(FormulaExpressionNode node, CompilationContext context) {
+        String id = node.getSourceFormulaId();
+        Integer requested = node.getSourceVersion();
+        if (requested != null && requested < 0) {
+            throw nodeError(node, "sourceVersion must be non-negative");
+        }
+        List<FormulaSourceSnapshot> previousSources = context.previousSources.stream()
+                .filter(snapshot -> id.equals(snapshot.getFormulaId())).toList();
+        if (requested == null) {
+            FormulaExpressionNode previous = context.previousNodes.get(node.getId());
+            if (previous != null && id.equals(previous.getSourceFormulaId())) {
+                requested = previous.getSourceVersion();
+            }
+            if (requested == null && previousSources.size() == 1) {
+                return previousSources.getFirst();
+            }
+            if (requested == null && (previousSources.size() > 1 || context.previousReferences.contains(id))) {
+                throw nodeError(node, "sourceVersion is required when a saved dependency cannot be identified");
+            }
+        }
+        if (requested != null) {
+            int number = requested;
+            var previous = previousSources.stream().filter(snapshot -> effectiveVersion(snapshot) == number).findFirst();
+            if (previous.isPresent()) {
+                return previous.get();
+            }
+            if (number == 0) {
+                throw nodeError(node, "legacy source snapshot was not found in this formula");
+            }
+            var historical = versions.find(id, number);
+            if (historical.isPresent()) {
+                return snapshot(node, historical.get());
+            }
+        }
+        FormulaEntity current = formulaRepository.findByIdAndStatus(id, FormulaStatus.PUBLIC)
+                .orElseThrow(() -> nodeError(node, "public source formula was not found"));
+        if (requested != null && requested != FormulaVersion.currentNumber(current)) {
+            throw nodeError(node, "public source version was not found");
+        }
+        return snapshot(node, FormulaVersion.from(current));
+    }
+
+    private FormulaSourceSnapshot snapshot(FormulaExpressionNode node, FormulaVersion source) {
+        if (source.variable()) {
+            throw nodeError(node, "variadic formulas are not supported in the builder yet");
+        }
+        return new FormulaSourceSnapshot(source.formulaId(), source.name(), source.equation(),
+                source.parameters(), source.version());
+    }
+
+    // Older snapshots may predate the live source used as catalog version 1.
+    private static int effectiveVersion(FormulaSourceSnapshot source) {
+        return Objects.requireNonNullElse(source.getVersion(), 0);
     }
 
     private FormulaExpressionNode findBinding(Map<String, FormulaExpressionNode> bindings, String parameter) {
@@ -179,5 +240,34 @@ public class FormulaTreeCompiler {
         private int nodeCount;
         private final Set<String> parameters = new LinkedHashSet<>();
         private final Map<String, FormulaSourceSnapshot> snapshots = new LinkedHashMap<>();
+        private final Map<String, FormulaExpressionNode> previousNodes = new LinkedHashMap<>();
+        private final List<FormulaSourceSnapshot> previousSources;
+        private final Set<String> previousReferences = new LinkedHashSet<>();
+
+        private CompilationContext(FormulaEntity previous) {
+            previousSources = previous == null || previous.getSourceSnapshots() == null
+                    ? List.of() : previous.getSourceSnapshots();
+            if (previous != null) {
+                indexNodes(previous.getExpressionTree());
+            }
+        }
+
+        private void indexNodes(FormulaExpressionNode node) {
+            if (node == null) {
+                return;
+            }
+            if (node.getType() == ExpressionNodeType.FORMULA) {
+                previousReferences.add(node.getSourceFormulaId());
+                if (node.getId() != null) {
+                    previousNodes.putIfAbsent(node.getId(), node);
+                }
+            }
+            if (node.getChildren() != null) {
+                node.getChildren().forEach(this::indexNodes);
+            }
+            if (node.getBindings() != null) {
+                node.getBindings().values().forEach(this::indexNodes);
+            }
+        }
     }
 }

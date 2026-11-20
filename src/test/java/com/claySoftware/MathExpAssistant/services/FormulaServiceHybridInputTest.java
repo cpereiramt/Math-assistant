@@ -10,6 +10,7 @@ import com.claySoftware.MathExpAssistant.models.FormulaExpressionNode;
 import com.claySoftware.MathExpAssistant.models.FormulaGroup;
 import com.claySoftware.MathExpAssistant.models.FormulaInputMode;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
+import com.claySoftware.MathExpAssistant.repositories.FormulaWrites;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -22,7 +23,7 @@ class FormulaServiceHybridInputTest {
     private final FormulaRepository repository = mock(FormulaRepository.class);
     private final FormulaTreeCompiler treeCompiler = mock(FormulaTreeCompiler.class);
     private final FormulaService service = new FormulaService(
-            new FormulaExecutor(), repository, new FormulaValidator(), treeCompiler);
+            new FormulaExecutor(), repository, new FormulaValidator(), treeCompiler, mock(FormulaWrites.class));
 
     @Test
     void keepsLegacyTextPayloadCompatible() {

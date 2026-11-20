@@ -14,6 +14,15 @@ public class FormulaExecutor {
     public FormulaExecutor() {
     }
 
+    public String validateSyntax(String equation) {
+        try {
+            new Expression(equation).validate();
+            return null;
+        } catch (ParseException ex) {
+            return "invalid equation syntax: " + ex.getMessage();
+        }
+    }
+
     public double executeFormula(String equation, Map<String, Double> variables) {
 
         Expression expression = new Expression(equation);

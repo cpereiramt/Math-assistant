@@ -16,11 +16,14 @@ import com.claySoftware.MathExpAssistant.models.FormulaSearchResponse;
 import com.claySoftware.MathExpAssistant.models.FormulaSearchScope;
 import com.claySoftware.MathExpAssistant.models.FormulaType;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
+import com.claySoftware.MathExpAssistant.repositories.FormulaWrites;
 import com.claySoftware.MathExpAssistant.utils.FormulaNormalizer;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.HashMap;
@@ -35,16 +38,19 @@ public class FormulaService {
     private final FormulaExecutor formulaExecutor;
     private final FormulaValidator validator;
     private final FormulaTreeCompiler treeCompiler;
+    private final FormulaWrites writes;
 
     public FormulaService(
             FormulaExecutor formulaExecutor,
             FormulaRepository formulaRepository,
             FormulaValidator validator,
-            FormulaTreeCompiler treeCompiler) {
+            FormulaTreeCompiler treeCompiler,
+            FormulaWrites writes) {
         this.formulaExecutor = formulaExecutor;
         this.formulaRepository = formulaRepository;
         this.validator = validator;
         this.treeCompiler = treeCompiler;
+        this.writes = writes;
     }
 
     public List<FormulaEntity> listPublicFormulas() {
@@ -58,7 +64,7 @@ public class FormulaService {
     }
 
     public List<FormulaEntity> listUserFormulas(String ownerUserId) {
-        return formulaRepository.findAllByOwnerUserIdAndStatus(ownerUserId, FormulaStatus.PRIVATE);
+        return formulaRepository.findAllByOwnerUserId(ownerUserId);
     }
 
     public FormulaSearchResponse searchFormulas(
@@ -97,7 +103,7 @@ public class FormulaService {
     }
 
     public Optional<FormulaEntity> getUserFormula(String id, String ownerUserId) {
-        return formulaRepository.findByIdAndOwnerUserIdAndStatus(id, ownerUserId, FormulaStatus.PRIVATE);
+        return formulaRepository.findByIdAndOwnerUserId(id, ownerUserId);
     }
 
     // TODO : Put some form of cache, maybe using caffeine
@@ -140,10 +146,17 @@ public class FormulaService {
         return executeExistingFormula(opt.get(), req);
     }
 
-    public String insertNewFormula(FormulaEntity formulaEntity) {
+    public String insertNewFormula(FormulaEntity formulaEntity, String ownerUserId) {
+        formulaEntity.setStatus(FormulaStatus.UNDER_REVIEW);
+        formulaEntity.setOwnerUserId(ownerUserId);
+        formulaEntity.setOwnerEmail(ownerUserId);
         normalizeFormula(formulaEntity);
+        String preparationError = prepareFormulaInput(formulaEntity, null);
+        if (preparationError != null) {
+            return "validation_error: " + preparationError;
+        }
 
-        String validationError = validator.validateFormulaForInsert(formulaEntity);
+        String validationError = validatePublication(formulaEntity);
         if (validationError != null) {
             return "validation_error: " + validationError;
         }
@@ -159,27 +172,31 @@ public class FormulaService {
         Instant now = Instant.now();
         formulaEntity.setCreatedAt(now);
         formulaEntity.setUpdatedAt(now);
-        formulaRepository.save(formulaEntity);
+        formulaRepository.insert(formulaEntity);
         return "new formula successful saved";
     }
 
     public String validateUserFormula(FormulaEntity formulaEntity) {
+        return validateUserFormula(formulaEntity, null);
+    }
+
+    public String validateUserFormula(FormulaEntity formulaEntity, FormulaEntity previous) {
         normalizeFormula(formulaEntity);
         formulaEntity.setVariable(false);
         formulaEntity.setStatus(FormulaStatus.PRIVATE);
-        String preparationError = prepareFormulaInput(formulaEntity);
+        String preparationError = prepareFormulaInput(formulaEntity, previous);
         if (preparationError != null) {
             return preparationError;
         }
         return validateCustomFormula(formulaEntity);
     }
 
-    public Map<String, Object> previewUserFormula(FormulaPreviewRequest request) {
+    public Map<String, Object> previewUserFormula(FormulaPreviewRequest request, FormulaEntity previous) {
         if (request == null || request.getFormula() == null) {
             return Map.of("valid", false, "message", "formula is required");
         }
         FormulaEntity formula = request.getFormula();
-        String validationError = validateUserFormula(formula);
+        String validationError = validateUserFormula(formula, previous);
         if (validationError != null) {
             return Map.of("valid", false, "message", validationError);
         }
@@ -201,7 +218,7 @@ public class FormulaService {
         normalizeFormula(formulaEntity);
         prepareCustomFormulaForOwner(formulaEntity, ownerUserId, ownerEmail);
 
-        String preparationError = prepareFormulaInput(formulaEntity);
+        String preparationError = prepareFormulaInput(formulaEntity, null);
         if (preparationError != null) {
             return "validation_error: " + preparationError;
         }
@@ -218,34 +235,27 @@ public class FormulaService {
                 FormulaStatus.PRIVATE);
 
         if (existingFormula.isPresent()) {
-            return "validation_error: custom formula already exists for this name and group";
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "custom formula already exists for this name and group");
         }
 
         Instant now = Instant.now();
         formulaEntity.setCreatedAt(now);
         formulaEntity.setUpdatedAt(now);
-        formulaRepository.save(formulaEntity);
+        formulaRepository.insert(formulaEntity);
         return "new custom formula successful saved";
     }
 
     public String updateUserFormula(String id, FormulaEntity formulaEntity, String ownerUserId, String ownerEmail) {
-        Optional<FormulaEntity> existing = formulaRepository.findByIdAndOwnerUserIdAndStatus(
-                id,
-                ownerUserId,
-                FormulaStatus.PRIVATE);
-
-        if (existing.isEmpty()) {
-            return "not_found: custom formula not found for user";
-        }
+        FormulaEntity existing = privateFormula(id, ownerUserId);
 
         normalizeFormula(formulaEntity);
         prepareCustomFormulaForOwner(formulaEntity, ownerUserId, ownerEmail);
-        String preparationError = prepareFormulaInput(formulaEntity);
+        String preparationError = prepareFormulaInput(formulaEntity, existing);
         if (preparationError != null) {
             return "validation_error: " + preparationError;
         }
         formulaEntity.setId(id);
-        formulaEntity.setCreatedAt(existing.get().getCreatedAt());
+        formulaEntity.setCreatedAt(existing.getCreatedAt());
         formulaEntity.setUpdatedAt(Instant.now());
 
         String validationError = validateCustomFormula(formulaEntity);
@@ -260,39 +270,33 @@ public class FormulaService {
                 FormulaStatus.PRIVATE);
 
         if (duplicate.isPresent() && !id.equals(duplicate.get().getId())) {
-            return "validation_error: custom formula already exists for this name and group";
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "custom formula already exists for this name and group");
         }
 
-        formulaRepository.save(formulaEntity);
+        writes.replace(existing, formulaEntity);
         return "custom formula successful updated";
     }
 
     public String deleteUserFormula(String id, String ownerUserId) {
-        Optional<FormulaEntity> existing = formulaRepository.findByIdAndOwnerUserIdAndStatus(
-                id,
-                ownerUserId,
-                FormulaStatus.PRIVATE);
-
-        if (existing.isEmpty()) {
-            return "not_found: custom formula not found for user";
-        }
-
-        formulaRepository.delete(existing.get());
+        writes.delete(privateFormula(id, ownerUserId));
         return "custom formula deleted with success";
     }
 
     public String publishUserFormula(String id, String ownerUserId) {
-        Optional<FormulaEntity> existing = formulaRepository.findByIdAndOwnerUserIdAndStatus(
-                id, ownerUserId, FormulaStatus.PRIVATE);
-        if (existing.isEmpty()) {
-            return "not_found: custom formula not found for user";
-        }
-
-        FormulaEntity formula = existing.get();
-        formula.setStatus(FormulaStatus.PUBLIC);
+        FormulaEntity formula = privateFormula(id, ownerUserId);
+        formula.setStatus(FormulaStatus.UNDER_REVIEW);
         formula.setUpdatedAt(Instant.now());
-        formulaRepository.save(formula);
-        return "custom formula published with success";
+        writes.replaceFromStatus(formula, FormulaStatus.PRIVATE);
+        return "custom formula submitted for review";
+    }
+
+    private FormulaEntity privateFormula(String id, String ownerUserId) {
+        FormulaEntity formula = getUserFormula(id, ownerUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "custom formula not found for user"));
+        if (formula.getStatus() != FormulaStatus.PRIVATE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "formula must be PRIVATE");
+        }
+        return formula;
     }
 
     private String executeExistingFormula(FormulaEntity formula, ExecuteFormulaRequest req) {
@@ -372,7 +376,7 @@ public class FormulaService {
         }
     }
 
-    private void normalizeFormula(FormulaEntity formula) {
+    void normalizeFormula(FormulaEntity formula) {
         if (formula == null) {
             return;
         }
@@ -405,7 +409,7 @@ public class FormulaService {
         formula.setMaxParameters(null);
     }
 
-    private String prepareFormulaInput(FormulaEntity formula) {
+    String prepareFormulaInput(FormulaEntity formula, FormulaEntity previous) {
         FormulaInputMode mode = formula.getInputMode();
         if (mode == null) {
             mode = formula.getExpressionTree() == null ? FormulaInputMode.TEXT : FormulaInputMode.BUILDER;
@@ -418,12 +422,17 @@ public class FormulaService {
             formula.setBuilderVersion(null);
             return null;
         }
+        if (formula.isVariable()) {
+            return "builder formulas must be fixed";
+        }
         if (formula.getExpressionTree() == null) {
             return "expressionTree is required in BUILDER mode";
         }
 
         try {
-            FormulaCompilationResult compiled = treeCompiler.compile(formula.getExpressionTree());
+            FormulaCompilationResult compiled = previous == null
+                    ? treeCompiler.compile(formula.getExpressionTree())
+                    : treeCompiler.compile(formula.getExpressionTree(), previous);
             formula.setEquation(compiled.equation());
             formula.setDisplayEquation(compiled.displayEquation());
             formula.setParameters(compiled.parameters());
@@ -433,6 +442,16 @@ public class FormulaService {
         } catch (IllegalArgumentException ex) {
             return ex.getMessage();
         }
+    }
+
+    String validatePublication(FormulaEntity formula) {
+        String error = validator.validateFormulaForInsert(formula);
+        if (error != null) {
+            return error;
+        }
+        return formulaExecutor.validateSyntax(formula.isVariable()
+                ? EquationBuilder.buildVariadicEquation(formula.getEquation(), 2)
+                : formula.getEquation());
     }
 
     private String validateCustomFormula(FormulaEntity formula) {

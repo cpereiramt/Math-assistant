@@ -15,6 +15,7 @@ public class FormulaExpressionNode {
     private String variableName;
     private String constantValue;
     private String sourceFormulaId;
+    private Integer sourceVersion;
     private List<FormulaExpressionNode> children;
     private Map<String, FormulaExpressionNode> bindings;
 }

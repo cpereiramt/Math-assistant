@@ -1,6 +1,9 @@
 package com.claySoftware.MathExpAssistant.config;
 
 import com.claySoftware.MathExpAssistant.services.JwtTokenProvider;
+import com.claySoftware.MathExpAssistant.utils.AdminBypass;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -38,7 +41,7 @@ public class SecurityConfig {
         @Bean
         public SecurityFilterChain securityFilterChain(HttpSecurity http,
                         ApiAuthenticationEntryPoint apiEntryPoint,
-                        OAuth2LoginSuccessHandler successHandler) throws Exception {
+                        OAuth2LoginSuccessHandler successHandler, AdminBypass adminBypass) throws Exception {
 
                 http
                                 .csrf(csrf -> csrf.disable())
@@ -65,6 +68,15 @@ public class SecurityConfig {
 
                                                 // Emissão de JWT (exige login Google)
                                                 .requestMatchers("/auth/token").authenticated()
+
+                                                .requestMatchers("/api/formulas/admin/**", "/api/formulas/delete/**")
+                                                .access((authentication, context) -> {
+                                                    var principal = authentication.get();
+                                                    return new AuthorizationDecision(principal != null
+                                                            && principal.isAuthenticated()
+                                                            && !(principal instanceof AnonymousAuthenticationToken)
+                                                            && adminBypass.isAdminEmail(principal.getName()));
+                                                })
 
                                                 // API protegida por JWT
                                                 .requestMatchers("/api/**").authenticated()

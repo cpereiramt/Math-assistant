@@ -16,4 +16,9 @@ public class FormulaSourceSnapshot {
     private String name;
     private String equation;
     private List<String> parameters;
+    private Integer version;
+
+    public FormulaSourceSnapshot(String formulaId, String name, String equation, List<String> parameters) {
+        this(formulaId, name, equation, parameters, null);
+    }
 }

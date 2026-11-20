@@ -15,7 +15,7 @@ public final class FormulaNormalizer {
 
     public static List<String> normalizeParameters(List<String> params) {
         return params.stream()
-                .map(p -> p.trim().toUpperCase())
+                .map(p -> p == null ? null : p.trim().toUpperCase())
                 .collect(Collectors.toList());
     }
 

@@ -1,11 +1,14 @@
 package com.claySoftware.MathExpAssistant.helpers;
 
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
+import com.claySoftware.MathExpAssistant.entities.FormulaVersion;
 import com.claySoftware.MathExpAssistant.models.ExpressionNodeType;
 import com.claySoftware.MathExpAssistant.models.ExpressionOperator;
 import com.claySoftware.MathExpAssistant.models.FormulaExpressionNode;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
+import com.claySoftware.MathExpAssistant.models.FormulaSourceSnapshot;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
+import com.claySoftware.MathExpAssistant.repositories.FormulaVersionStore;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -19,7 +22,8 @@ import static org.mockito.Mockito.when;
 
 class FormulaTreeCompilerTest {
     private final FormulaRepository repository = mock(FormulaRepository.class);
-    private final FormulaTreeCompiler compiler = new FormulaTreeCompiler(repository);
+    private final FormulaVersionStore versions = mock(FormulaVersionStore.class);
+    private final FormulaTreeCompiler compiler = new FormulaTreeCompiler(repository, versions);
 
     @Test
     void compilesOperatorsVariablesAndConstants() {
@@ -80,6 +84,46 @@ class FormulaTreeCompilerTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("node formula-node-7")
                 .hasMessageContaining("missing binding for parameter B");
+    }
+
+    @Test
+    void retainsTwoDifferentVersionsOfTheSameSourceAcrossEdits() {
+        FormulaEntity source = new FormulaEntity();
+        source.setId("source");
+        source.setEquation("X+1");
+        source.setParameters(List.of("X"));
+        source.setVersion(1);
+        when(versions.find("source", 1)).thenReturn(Optional.of(FormulaVersion.from(source)));
+        source.setEquation("X+2");
+        source.setVersion(2);
+        when(versions.find("source", 2)).thenReturn(Optional.of(FormulaVersion.from(source)));
+
+        FormulaExpressionNode savedTree = operator("root", ExpressionOperator.SUBTRACT,
+                reference("older", 1), reference("newer", 2));
+        var saved = compiler.compile(savedTree);
+        FormulaEntity existing = new FormulaEntity();
+        existing.setExpressionTree(savedTree);
+        existing.setSourceSnapshots(saved.sourceSnapshots());
+
+        FormulaExpressionNode editedTree = operator("root", ExpressionOperator.SUBTRACT,
+                reference("older", null), reference("newer", null));
+        var edited = compiler.compile(editedTree, existing);
+
+        assertThat(editedTree.getChildren()).extracting(FormulaExpressionNode::getSourceVersion)
+                .containsExactly(1, 2);
+        assertThat(edited.equation()).isEqualTo(saved.equation());
+        assertThat(edited.sourceSnapshots()).extracting(FormulaSourceSnapshot::getVersion)
+                .containsExactly(1, 2);
+    }
+
+    private FormulaExpressionNode reference(String nodeId, Integer version) {
+        FormulaExpressionNode reference = new FormulaExpressionNode();
+        reference.setId(nodeId);
+        reference.setType(ExpressionNodeType.FORMULA);
+        reference.setSourceFormulaId("source");
+        reference.setSourceVersion(version);
+        reference.setBindings(Map.of("X", variable(nodeId + "-binding", "X")));
+        return reference;
     }
 
     private FormulaExpressionNode variable(String id, String name) {

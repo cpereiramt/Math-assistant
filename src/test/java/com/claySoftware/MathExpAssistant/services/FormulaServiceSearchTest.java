@@ -9,6 +9,7 @@ import com.claySoftware.MathExpAssistant.models.FormulaSearchResponse;
 import com.claySoftware.MathExpAssistant.models.FormulaSearchScope;
 import com.claySoftware.MathExpAssistant.models.FormulaType;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
+import com.claySoftware.MathExpAssistant.repositories.FormulaWrites;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
@@ -26,7 +27,7 @@ import static org.mockito.Mockito.when;
 class FormulaServiceSearchTest {
     private final FormulaRepository repository = mock(FormulaRepository.class);
     private final FormulaService service = new FormulaService(
-            new FormulaExecutor(), repository, new FormulaValidator(), mock(FormulaTreeCompiler.class));
+            new FormulaExecutor(), repository, new FormulaValidator(), mock(FormulaTreeCompiler.class), mock(FormulaWrites.class));
 
     @Test
     void searchesVariadicPublicFormulasWithPagination() {
