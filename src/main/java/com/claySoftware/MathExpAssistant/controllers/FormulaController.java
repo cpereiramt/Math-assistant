@@ -16,15 +16,16 @@ import com.claySoftware.MathExpAssistant.models.FormulaType;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.services.FormulaService;
 import com.claySoftware.MathExpAssistant.services.FormulaSocialService;
-import com.claySoftware.MathExpAssistant.utils.AdminBypass;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.data.domain.Sort;
@@ -44,17 +45,14 @@ public class FormulaController {
     private final FormulaService formulaService;
     private final FormulaSocialService formulaSocialService;
     private final FormulaRepository formulaRepository;
-    private final AdminBypass adminBypass;
 
     public FormulaController(
             FormulaService formulaService,
             FormulaSocialService formulaSocialService,
-            FormulaRepository formulaRepository,
-            AdminBypass adminBypass) {
+            FormulaRepository formulaRepository) {
         this.formulaRepository = formulaRepository;
         this.formulaService = formulaService;
         this.formulaSocialService = formulaSocialService;
-        this.adminBypass = adminBypass;
     }
 
     @PostMapping("/execute")
@@ -74,9 +72,13 @@ public class FormulaController {
     @PostMapping("/insert")
     @RateLimiter(name = "publicApi", fallbackMethod = "insertRateLimitFallback")
     @Bulkhead(name = "publicApi", fallbackMethod = "insertBulkheadFallback")
-    public String createNewFormula(@RequestBody @Validated FormulaEntity formulaEntity) {
-        formulaEntity.setStatus(FormulaStatus.UNDER_REVIEW);
-        return formulaService.insertNewFormula(formulaEntity);
+    public String createNewFormula(@RequestBody @Validated FormulaEntity formulaEntity,
+                                   Authentication authentication) {
+        String result = formulaService.insertNewFormula(formulaEntity, currentUser(authentication));
+        if (result.equals("Formula already exists")) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, result);
+        }
+        return requireValidWrite(result);
     }
 
     @GetMapping({ "/getAll", "/public" })
@@ -109,8 +111,11 @@ public class FormulaController {
     @GetMapping("/status/{status}")
     public ResponseEntity<?> getFormulaByStatus(@PathVariable String status) {
         try {
-            FormulaStatus formulaStatus = FormulaStatus.valueOf(status.toUpperCase());
-            return ResponseEntity.ok(formulaRepository.findAllByStatus(formulaStatus));
+            FormulaStatus formulaStatus = FormulaStatus.valueOf(status.toUpperCase(Locale.ROOT));
+            if (formulaStatus != FormulaStatus.PUBLIC) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "only PUBLIC is available"));
+            }
+            return ResponseEntity.ok(formulaService.listPublicFormulas());
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.badRequest().body(Map.of("message", "invalid formula status"));
         }
@@ -135,7 +140,7 @@ public class FormulaController {
             @RequestBody @Validated FormulaEntity formulaEntity,
             Authentication authentication) {
         String owner = currentUser(authentication);
-        return formulaService.insertUserFormula(formulaEntity, owner, owner);
+        return requireValidWrite(formulaService.insertUserFormula(formulaEntity, owner, owner));
     }
 
     @PutMapping("/mine/{id}")
@@ -144,7 +149,7 @@ public class FormulaController {
             @RequestBody @Validated FormulaEntity formulaEntity,
             Authentication authentication) {
         String owner = currentUser(authentication);
-        return formulaService.updateUserFormula(id, formulaEntity, owner, owner);
+        return requireValidWrite(formulaService.updateUserFormula(id, formulaEntity, owner, owner));
     }
 
     @DeleteMapping("/mine/{id}")
@@ -155,10 +160,7 @@ public class FormulaController {
     @PostMapping("/mine/{id}/publish")
     public ResponseEntity<?> publishMyFormula(@PathVariable String id, Authentication authentication) {
         String result = formulaService.publishUserFormula(id, currentUser(authentication));
-        if (result.startsWith("not_found:")) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(Map.of("message", result));
+        return ResponseEntity.accepted().body(Map.of("message", result, "status", FormulaStatus.UNDER_REVIEW));
     }
 
     @PostMapping("/{formulaId}/ratings")
@@ -231,8 +233,10 @@ public class FormulaController {
     }
 
     @PostMapping("/mine/validate")
-    public Map<String, Object> validateMyFormula(@RequestBody @Validated FormulaEntity formulaEntity) {
-        String validationError = formulaService.validateUserFormula(formulaEntity);
+    public Map<String, Object> validateMyFormula(@RequestBody @Validated FormulaEntity formulaEntity,
+                                                @RequestParam(required = false) String formulaId,
+                                                Authentication authentication) {
+        String validationError = formulaService.validateUserFormula(formulaEntity, editContext(formulaId, authentication));
         if (validationError == null) {
             Map<String, Object> response = new java.util.LinkedHashMap<>();
             response.put("valid", true);
@@ -255,24 +259,25 @@ public class FormulaController {
     }
 
     @PostMapping("/builder/preview")
-    public Map<String, Object> previewBuilderFormula(@RequestBody FormulaPreviewRequest request) {
-        return formulaService.previewUserFormula(request);
+    public Map<String, Object> previewBuilderFormula(@RequestBody FormulaPreviewRequest request,
+                                                     @RequestParam(required = false) String formulaId,
+                                                     Authentication authentication) {
+        return formulaService.previewUserFormula(request, editContext(formulaId, authentication));
     }
 
-    @DeleteMapping("/delete/{id}")
-    public String deleteFormula(@PathVariable String id, Authentication authentication) {
-        Optional<FormulaEntity> formulaToDelete = formulaRepository.findById(id);
-        String email = currentUser(authentication);
-
-        if (!adminBypass.isAdminEmail(email)) {
-            return "Access denied";
+    private FormulaEntity editContext(String id, Authentication authentication) {
+        if (id == null) {
+            return null;
         }
+        return formulaService.getUserFormula(id, currentUser(authentication))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "custom formula not found for user"));
+    }
 
-        if (formulaToDelete.isPresent()) {
-            formulaRepository.delete(formulaToDelete.get());
-            return "formula deleted with success !";
+    private String requireValidWrite(String result) {
+        if (result.startsWith("validation_error:")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, result);
         }
-        return "formula not found !";
+        return result;
     }
 
     private String currentUser(Authentication authentication) {
@@ -303,13 +308,13 @@ public class FormulaController {
                 "Server busy", ex);
     }
 
-    private String insertRateLimitFallback(FormulaEntity formulaEntity, RequestNotPermitted ex) {
+    private String insertRateLimitFallback(FormulaEntity formulaEntity, Authentication authentication, RequestNotPermitted ex) {
         throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
                 "Too Many Requests", ex);
     }
 
-    private String insertBulkheadFallback(FormulaEntity formulaEntity, BulkheadFullException ex) {
+    private String insertBulkheadFallback(FormulaEntity formulaEntity, Authentication authentication, BulkheadFullException ex) {
         throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
                 "Server busy", ex);

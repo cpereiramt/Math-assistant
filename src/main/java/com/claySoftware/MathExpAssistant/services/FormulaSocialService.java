@@ -104,7 +104,7 @@ public class FormulaSocialService {
 
     public FormulaCommentEntity addComment(String formulaId, String userId, FormulaCommentRequest request) {
         requireUser(userId);
-        FormulaEntity formula = publicFormula(formulaId);
+        publicFormula(formulaId);
         if (request == null || request.content() == null || request.content().isBlank()) {
             throw new IllegalArgumentException("comment content is required");
         }
@@ -130,9 +130,7 @@ public class FormulaSocialService {
         comment.setUpdatedAt(comment.getCreatedAt());
         FormulaCommentEntity saved = commentRepository.save(comment);
 
-        formula.setCommentCount(commentRepository.countByFormulaIdAndDeletedFalse(formulaId));
-        formula.setUpdatedAt(Instant.now());
-        formulaRepository.save(formula);
+        refreshCommentCount(formulaId);
         return saved;
     }
 
@@ -181,11 +179,12 @@ public class FormulaSocialService {
         comment.setUpdatedAt(Instant.now());
         commentRepository.save(comment);
 
-        formulaRepository.findByIdAndStatus(comment.getFormulaId(), PUBLIC).ifPresent(formula -> {
-            formula.setCommentCount(commentRepository.countByFormulaIdAndDeletedFalse(comment.getFormulaId()));
-            formula.setUpdatedAt(Instant.now());
-            formulaRepository.save(formula);
-        });
+        refreshCommentCount(comment.getFormulaId());
+    }
+
+    private void refreshCommentCount(String formulaId) {
+        formulaRepository.updateCommentCount(formulaId,
+                commentRepository.countByFormulaIdAndDeletedFalse(formulaId), Instant.now());
     }
 
     private FormulaEntity publicFormula(String formulaId) {
@@ -203,7 +202,9 @@ public class FormulaSocialService {
         formula.setAverageRating(total == 0 ? 0 : (double) (upvotes - downvotes) / total);
         formula.setCommentCount(commentRepository.countByFormulaIdAndDeletedFalse(formula.getId()));
         formula.setUpdatedAt(Instant.now());
-        return formulaRepository.save(formula);
+        formulaRepository.updateMetrics(formula.getId(), upvotes, downvotes, total, formula.getAverageRating(),
+                formula.getCommentCount(), formula.getUpdatedAt());
+        return formula;
     }
 
     private void requireUser(String userId) {

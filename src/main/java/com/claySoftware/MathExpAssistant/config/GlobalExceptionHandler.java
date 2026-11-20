@@ -6,6 +6,8 @@ import com.claySoftware.MathExpAssistant.exceptions.SocialAccessDeniedException;
 import com.claySoftware.MathExpAssistant.exceptions.SocialResourceNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -34,6 +36,12 @@ public class GlobalExceptionHandler {
 
         return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
 
+    }
+
+    @ExceptionHandler({DuplicateKeyException.class, OptimisticLockingFailureException.class})
+    public ResponseEntity<Map<String, String>> handleWriteConflict() {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("message", "formula conflicts with existing data or was changed concurrently"));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
