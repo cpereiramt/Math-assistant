@@ -47,7 +47,39 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      - name: Start MongoDB replica set for tests
+        shell: bash
+        run: |
+          docker run --detach --name math-assistant-test-mongo \
+            --publish 127.0.0.1:27017:27017 mongo:7.0 \
+            --replSet rs0 --bind_ip_all
+
+          mongo_eval() {
+            docker exec math-assistant-test-mongo mongosh --quiet --eval "$1"
+          }
+
+          for attempt in {1..30}; do
+            if mongo_eval 'db.adminCommand({ ping: 1 })' >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+
+          mongo_eval 'if (!rs.initiate({_id: "rs0", members: [{_id: 0, host: "localhost:27017"}]}).ok) quit(1)'
+
+          for attempt in {1..30}; do
+            if mongo_eval 'quit(db.hello().isWritablePrimary ? 0 : 1)' >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs math-assistant-test-mongo
+          exit 1
+
       - name: Run Gradle tests
+        env:
+          SPRING_DATA_MONGODB_URI: 'mongodb://127.0.0.1:27017/math_assistant_ci?replicaSet=rs0&directConnection=true'
+          FORMULA_TEST_MONGO_URI: 'mongodb://127.0.0.1:27017/math_assistant_ci?replicaSet=rs0&directConnection=true'
         run: bash ./gradlew --no-daemon test
 
       - uses: google-github-actions/auth@v3
