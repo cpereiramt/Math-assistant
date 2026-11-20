@@ -48,6 +48,7 @@ public class SecurityConfig {
                                 .cors(Customizer.withDefaults())
                                 .authorizeHttpRequests(auth -> auth
                                          .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/").permitAll()
                                                 // Swagger + OpenAPI
                                                 .requestMatchers(
                                                                 "/docs/**",

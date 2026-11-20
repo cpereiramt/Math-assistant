@@ -30,6 +30,14 @@ public class JWTIntegrationTest {
     private JwtTokenProvider jwtTokenProvider;
 
     @Test
+    void redirectsRootToGoogleAuthorization() {
+        ResponseEntity<Void> response = restTemplate.getForEntity("/", Void.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FOUND);
+        assertThat(response.getHeaders().getLocation()).hasToString("/oauth2/authorization/google");
+    }
+
+    @Test
     public void testJwtAuthentication() {
         // Generate a JWT token for testing
         String token = Jwts.builder()
