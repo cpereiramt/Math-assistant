@@ -731,92 +731,13 @@ Fallback behavior:
 
 #### `POST /api/formulas/insert`
 
-Creates a new formula.
+Submits a formula directly to `UNDER_REVIEW` using the authenticated account as owner. Success returns `200` with `new formula successful saved`. Invalid content returns `400`. A conflicting name or scope returns `409`. This endpoint uses the `publicApi` rate limiter and bulkhead.
 
-Behavior:
-
-1. Normalizes equation to uppercase.
-2. Normalizes parameters to uppercase.
-3. Sets status to `UNDER_REVIEW`.
-4. Converts formula name to uppercase.
-5. Validates the formula.
-6. Rejects duplicate names.
-7. Saves the formula in MongoDB.
-
-Fixed formula request:
-
-```json
-{
-  "name": "RECTANGLE_AREA",
-  "group": "GEOMETRY",
-  "variable": false,
-  "equation": "BASE * HEIGHT",
-  "parameters": ["BASE", "HEIGHT"]
-}
-```
-
-Variadic formula request:
-
-```json
-{
-  "name": "ADDITION",
-  "group": "ARITHMETIC",
-  "variable": true,
-  "operator": "+",
-  "minParameters": 1,
-  "maxParameters": 100
-}
-```
-
-Successful response:
-
-```text
-new formula successful saved
-```
-
-Possible error responses:
-
-```text
-validation_error: Payload is required
-validation_error: name is required
-validation_error: group is required
-validation_error: equation is required for fixed formulas
-validation_error: parameters is required for fixed formulas
-validation_error: operator must be empty for fixed formulas
-validation_error: invalid parameter name: ...
-validation_error: duplicate parameter: ...
-validation_error: operator is required for variadic formulas
-validation_error: unsupported operator for variadic formula: ...
-validation_error: minParams must be >= 1
-validation_error: maxParams must be >= 1
-validation_error: maxParams must be >= minParams
-validation_error: parameters must be empty for variadic formulas
-Formula already exists
-```
-
-Resilience:
-
-- Rate limiter: `publicApi`
-- Bulkhead: `publicApi`
+A fixed formula accepts `equation` and `parameters`. A variadic formula accepts an equation template such as `SUM({VALUES})`, `variable: true`, and optional `minParameters` and `maxParameters`.
 
 #### `DELETE /api/formulas/delete/{id}`
 
-Deletes a formula by MongoDB document ID.
-
-Behavior:
-
-1. Loads the formula by ID.
-2. Reads the authenticated user name.
-3. Checks admin access through `AdminBypass`.
-4. Deletes the formula if it exists and the user is admin.
-
-Responses:
-
-```text
-Access denied
-formula deleted with success !
-formula not found !
-```
+Requires administrative authorization. Returns `200` on deletion and `404` for an unknown ID. Deleting a public formula removes it from the live catalog and preserves every published version. For a legacy public formula, the server archives version 1 in the same transaction as the deletion. Builders can still reference the deleted source by specifying a historical version.
 
 #### `GET /api/formulas/getAll`
 
@@ -857,7 +778,7 @@ Returns a formula by name.
 Behavior:
 
 - Converts `{name}` to uppercase.
-- Calls `FormulaRepository.findByName`.
+- Calls `FormulaRepository.findByNameAndStatus` with `PUBLIC`.
 
 Response:
 
@@ -865,16 +786,65 @@ Response:
 
 #### `GET /api/formulas/status/{status}`
 
-Returns formulas by status.
+Returns `200` and a list for `PUBLIC` (case-insensitive). Other recognized statuses return `403`. An unknown status returns `400`. Owners can see their own formulas through `GET /api/formulas/mine` and `GET /api/formulas/mine/{id}`, including the review decision and audit fields.
 
-Behavior:
+### Formula moderation and revision
 
-- Converts `{status}` to uppercase.
-- Calls `FormulaRepository.findAllByStatus`.
+All formula endpoints require authentication. Spring Security checks administrative operations against the server-side `ADMIN_CREDS` email using the authenticated principal. The JWT filter verifies the signature before setting that principal. The JWT `role` claim does not grant moderation access.
 
-Response:
+| Method and path | Request | Successful response |
+| --- | --- | --- |
+| `POST /api/formulas/mine/{id}/publish` | No body. The caller must own the `PRIVATE` formula. | `202` with `{"status":"UNDER_REVIEW","message":"custom formula submitted for review"}`. |
+| `GET /api/formulas/admin/pending` | Administrator. | `200` with all `UNDER_REVIEW` formulas. |
+| `POST /api/formulas/admin/{id}/approve` | Administrator. `{"reason":"Reference verified"}`. | `200` with the `PUBLIC` formula and version 1. |
+| `POST /api/formulas/admin/{id}/reject` | Administrator. `{"reason":"Incorrect equation"}`. | `200` with the `REJECTED` formula and its review audit. |
+| `PUT /api/formulas/admin/{id}/revision` | Administrator. `expectedVersion`, `reason`, and a full replacement `formula` object. | `200` with the updated public formula and its incremented version. |
+| `GET /api/formulas/{id}/versions` | Published formula ID. | `200` with snapshots ordered from newest to oldest. |
+| `GET /api/formulas/{id}/versions/{version}` | Published formula ID and a positive version number. | `200` with the requested snapshot. |
 
-- `Optional<List<FormulaEntity>>` serialized by Spring.
+Both review decisions require `UNDER_REVIEW`. Owner edits and deletions require `PRIVATE`. Public changes go through the administrative revision endpoint, which publishes the full content atomically and preserves the formula ID, ownership and social metrics. Each publication and rejection records `reviewedBy`, `reviewedAt`, and `reviewReason`. IDs, owner, status, version, audit fields, snapshots, and social counters are read-only on formula payloads. Review reasons must contain 1–1000 characters and cannot be blank.
+
+An invalid body or version number returns `400`. Missing authentication returns `401`. An authenticated caller without administrative access gets `403`. An absent resource, an owner route for someone else's formula, or a version of a formula that has never been published returns `404`. Invalid transitions, stale `expectedVersion`, concurrent writes, and conflicting publication names return `409`.
+
+Example public revision request:
+
+```json
+{
+  "expectedVersion": 1,
+  "reason": "Use the verified perimeter equation",
+  "formula": {
+    "name": "RECTANGLE_PERIMETER",
+    "group": "GEOMETRY",
+    "equation": "2 * (WIDTH + HEIGHT)",
+    "parameters": ["WIDTH", "HEIGHT"]
+  }
+}
+```
+
+### Builder references
+
+A `FORMULA` node accepts `sourceFormulaId` and optional `sourceVersion`. For a new dependency, omitting the number selects the current public version and the saved tree records the selected number. On edit, an omitted number preserves the existing dependency using the saved node ID and snapshots. When multiple versions of the same source are saved, keep the node IDs stable or provide the desired version explicitly. To upgrade, query the version history and set the chosen number in the node. The builder catalog lists current fixed public formulas.
+
+Execution uses the stored expanded equation. Legacy builder snapshots without version metadata keep their original equation and parameters. An edit can reuse them as `sourceVersion: 0`, a marker local to that formula. It is distinct from the catalog's legacy version 1. For edit-time validation and preview, pass `?formulaId={id}` to `POST /api/formulas/mine/validate` or `POST /api/formulas/builder/preview` to reuse the owned formula's saved dependencies. Text formulas and existing expanded equations remain readable without migration.
+
+### MongoDB history and compatibility
+
+The application only inserts into `formula_versions`. Each snapshot contains the published content, builder dependencies and review audit. The deterministic ID `formulaId:version` and the `formula_version_history` index enforce uniqueness. Publication, revision and deletion of public formulas require a MongoDB replica set or sharded cluster with transactions. Run one application version at a time during rollout so older writers cannot overwrite versioned documents.
+
+A legacy `PUBLIC` formula with no version is treated as version 1. The history API returns it on demand without inventing audit fields. Its first revision archives the legacy state and appends version 2 in one transaction. A legacy public deletion also archives version 1. No bulk rewrite is required. The partial `unique_published_formula_name` index applies to new publications and revisions. Existing public names are also checked at write time. If legacy data contains duplicate public names, rename conflicting records in their first revisions to make name-based lookups unambiguous.
+
+The existing standalone development Compose database can serve read flows. For moderation and integration tests, start a disposable local replica set:
+
+```sh
+docker run -d --rm --name math-formula-test-mongo -p 127.0.0.1:27029:27017 mongo:7 --replSet rs0 --bind_ip_all
+docker exec math-formula-test-mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
+```
+
+After the replica set elects a primary, use its URI as `MONGO_URI` for local application runs. With the test suite, use `FORMULA_TEST_MONGO_URI` to enable the MongoDB integration tests. They create and remove a disposable test database.
+
+```sh
+FORMULA_TEST_MONGO_URI='mongodb://127.0.0.1:27029/?replicaSet=rs0&directConnection=true' ./gradlew test
+```
 
 ## 15. Data Model
 
@@ -907,13 +877,12 @@ Fields:
 | `maxParameters` | `int` | Maximum number of values for variadic formulas. |
 | `operator` | `String` | Operator used to build variadic equations. |
 
-Indexes:
+| `version` | `Integer` | Current publication version. Legacy public formulas may have no stored number. |
+| `reviewedBy` | `String` | Authenticated reviewer. |
+| `reviewedAt` | `Instant` | Time of the review decision. |
+| `reviewReason` | `String` | Moderator's justification. |
 
-```java
-@CompoundIndex(name = "unique_name_group", def = "{'name': 1, 'group': 1}", unique = true)
-```
-
-This index enforces uniqueness for the combination of `name` and `group`.
+The `unique_formula_scope` index enforces uniqueness across `name`, `group`, `status`, and `ownerUserId`. The partial `unique_published_formula_name` index prevents concurrent reviewed publications with the same normalized name.
 
 ### UserEntity
 
@@ -974,6 +943,7 @@ PUBLIC
 PRIVATE
 DEPRECATED
 UNDER_REVIEW
+REJECTED
 ```
 
 ### UserPlan
@@ -1551,41 +1521,6 @@ Recommendation:
 
 - Align both to the same variable name.
 - Prefer one clear name, such as `MONGODB_URI`.
-
-### Admin Email Check May Use the Wrong Identifier
-
-`JwtTokenProvider` extracts:
-
-- `sub` from Google OIDC subject.
-- `email` from Google OIDC email.
-
-But admin logic currently checks `sub`:
-
-```java
-adminBypass.effectivePlan(sub)
-adminBypass.isAdminEmail(sub)
-```
-
-The helper name and environment variable `ADMIN_CREDS` suggest that email should be used.
-
-Recommendation:
-
-- Confirm whether `ADMIN_CREDS` stores an email or Google subject.
-- If it stores an email, call admin checks with `email`.
-
-### Delete Endpoint Admin Check Depends on Authentication Name
-
-The delete endpoint uses:
-
-```java
-String email = (String) authentication.getName();
-```
-
-The JWT filter creates a user using the JWT subject, not the email claim. The JWT subject is currently the OIDC user name.
-
-Recommendation:
-
-- If admin deletion should depend on email, extract the email claim from the JWT and expose it in the authentication principal or authorities.
 
 ### Test Configuration Should Be Revisited
 
