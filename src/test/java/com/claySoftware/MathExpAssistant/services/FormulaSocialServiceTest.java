@@ -44,8 +44,6 @@ class FormulaSocialServiceTest {
         when(commentRepository.countByFormulaIdAndDeletedFalse(any())).thenReturn(0L);
         when(ratingRepository.save(any(FormulaRatingEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
-        when(formulaRepository.save(any(FormulaEntity.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
