@@ -23,14 +23,11 @@ public class AwsSecretsEnvironmentPostProcessor implements EnvironmentPostProces
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        boolean explicit = Boolean.parseBoolean(environment.getProperty("USE_AWS_SECRETS", "false"));
-        boolean prodProfile = environment.acceptsProfiles(org.springframework.core.env.Profiles.of("prod"));
-        boolean prodFlag = Boolean.parseBoolean(environment.getProperty("app.secrets.use-aws", "false"));
-
-        boolean shouldUseAws = explicit || prodProfile || prodFlag;
-        if (!shouldUseAws) {
-            log.debug("AWS secrets loader: not enabled (explicit={}, prodProfile={}, prodFlag={}, ec2={})",
-                    explicit, prodProfile, prodFlag, false);
+        boolean useAws = environment.getProperty("USE_AWS_SECRETS", Boolean.class,
+                environment.getProperty("app.secrets.use-aws", Boolean.class,
+                        environment.matchesProfiles("prod")));
+        if (!useAws) {
+            log.debug("AWS secrets loader disabled");
             return;
         }
 
