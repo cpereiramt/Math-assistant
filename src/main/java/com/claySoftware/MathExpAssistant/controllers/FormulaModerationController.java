@@ -3,6 +3,7 @@ package com.claySoftware.MathExpAssistant.controllers;
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
 import com.claySoftware.MathExpAssistant.entities.FormulaVersion;
 import com.claySoftware.MathExpAssistant.services.FormulaModerationService;
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -23,8 +24,10 @@ public class FormulaModerationController {
     }
 
     @GetMapping("/admin/pending")
-    public List<FormulaEntity> pending() {
-        return moderation.pending();
+    public List<PendingFormula> pending() {
+        return moderation.pending().stream()
+                .map(formula -> new PendingFormula(formula, formula.getOwnerEmail()))
+                .toList();
     }
 
     @PostMapping("/admin/{id}/approve")
@@ -61,6 +64,8 @@ public class FormulaModerationController {
         moderation.delete(id);
         return "formula deleted with success !";
     }
+
+    public record PendingFormula(@JsonUnwrapped FormulaEntity formula, String ownerEmail) {}
 
     public record ReviewRequest(@NotBlank @Size(max = 1000) String reason) {}
 

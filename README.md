@@ -418,3 +418,44 @@ Este documento descreve a arquitetura e os requisitos do sistema de assistente d
 ## 8. Conclusão
 
 Este documento estabelece a base arquitetural e funcional do Math Assistant, permitindo evolução contínua com suporte a fórmulas dinâmicas e escaláveis.
+
+## Community
+
+Author profiles and their published formulas are public. The application uses
+the account ID in profile links. Approved formulas store that ID. Older
+publications resolve by their stored owner when the account can be matched.
+Profile fields include display name, Google avatar, bio, website, published
+formulas, and follower count. Email and reviewer identifiers are excluded
+from public responses.
+
+A view is recorded only when a signed-in user opens a public formula in a
+visible browser tab. Each account adds at most one view per formula per UTC
+day. The view event and `viewCount` increment commit together. Counts already
+stored are carried forward. Search, ranking, and execution requests do not
+add views.
+
+The ranking uses rolling periods of 7, 30, and 90 days. The score is
+`(upvotes - downvotes) / (eligible votes + 5)`, ordered by score, eligible vote
+count, and formula ID. Only public formulas with eligible ratings participate.
+Each account contributes at most one vote per formula. Self-votes are excluded,
+and an account must have been at least 24 hours old when it first rated the
+formula. Changing a vote, removing it, or adding it back does not refresh its
+timestamp. Views, comments, and follows do not affect ranking.
+
+Community members can report spam, abuse, or mathematical errors in a public
+formula or comment. Include a counterexample or reference for mathematical
+errors. Moderators review the reported version with its evidence and record
+a reason for dismissal or removal. Content changed after reporting requires
+a new report before it can be removed through this workflow. Reports are
+deduplicated per reporter and content version. Daily limits per signed-in
+account are 10 publication submissions, 10 reports, 30 comment creations or
+edits, and 100 rating changes. Harassment, threats, discrimination,
+impersonation, unsolicited promotion, coordinated voting, and sharing someone
+else's private information are prohibited.
+
+The in-app inbox records approval, rejection, comments, first ratings from
+each account, and moderation removals. Authors receive comment notifications
+on their formulas, and reply authors receive notifications when someone replies
+to them. Community writes use MongoDB transactions and require the replica-set
+configuration also used for publication review. Run the integration tests with
+`FORMULA_TEST_MONGO_URI` pointing to a writable MongoDB replica set.

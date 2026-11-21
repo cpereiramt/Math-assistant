@@ -30,6 +30,9 @@ public class UserEntity {
 
     private String name;
     private String pictureUrl;
+    private String publicName;
+    private String publicBio;
+    private String publicWebsite;
     private UserPlan plan;
 
     private Instant createdAt;

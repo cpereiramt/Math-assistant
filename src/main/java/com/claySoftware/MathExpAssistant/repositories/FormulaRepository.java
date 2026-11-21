@@ -7,6 +7,8 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.Update;
 import java.time.Instant;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +39,9 @@ public interface FormulaRepository extends MongoRepository<FormulaEntity, String
         List<FormulaEntity> findAllByStatusOrderByUpvotesDescAverageRatingDescCreatedAtDesc(FormulaStatus status);
 
         List<FormulaEntity> findAllByOwnerUserId(String ownerUserId);
+
+        @Query("{'status': 'PUBLIC', '$or': [{'authorId': ?0}, {'authorId': null, '$or': [{'ownerUserId': {'$in': [?0, ?1]}}, {'ownerEmail': ?1}]}]}")
+        Page<FormulaEntity> findPublications(String userId, String email, Pageable page);
 
         Optional<FormulaEntity> findByIdAndOwnerUserId(String id, String ownerUserId);
 
