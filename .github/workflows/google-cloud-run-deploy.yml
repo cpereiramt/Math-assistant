@@ -2,11 +2,6 @@ name: Deploy to Google Cloud Run
 
 on:
   workflow_dispatch:
-    inputs:
-      staging_plan_limits:
-        description: Enable provisional plan quotas on the staging service
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -109,21 +104,11 @@ jobs:
       - name: Deploy to Cloud Run
         env:
           IMAGE: ${{ steps.image.outputs.ref }}
-          STAGING_PLAN_LIMITS: ${{ inputs.staging_plan_limits }}
         shell: bash
         run: |
-          profiles=prod,cloud-run
-          if [[ "$STAGING_PLAN_LIMITS" == "true" ]]; then
-            if [[ "$CLOUD_RUN_SERVICE" != "math-assistant-staging" ]]; then
-              echo "::error::Provisional plan quotas are limited to math-assistant-staging."
-              exit 1
-            fi
-            profiles+=,staging
-          fi
-
           gcloud run deploy "$CLOUD_RUN_SERVICE" \
             --project "$GCP_PROJECT_ID" --region "$GCP_REGION" \
             --image "$IMAGE" --service-account "$CLOUD_RUN_RUNTIME_SERVICE_ACCOUNT" \
-            --update-env-vars "^|^SPRING_APPLICATION_NAME=MathExpAssistant|SPRING_PROFILES_ACTIVE=$profiles|USE_AWS_SECRETS=false|JWT_EXPIRATION=$JWT_EXPIRATION|MONGODB_DATABASE=$MONGODB_DATABASE|OAUTH_GOOGLE_REDIRECT_URI=$OAUTH_GOOGLE_REDIRECT_URI|FRONTEND_BASE_URL=$FRONTEND_BASE_URL|APP_CORS_ALLOWED_ORIGINS=$APP_CORS_ALLOWED_ORIGINS" \
+            --update-env-vars "^|^SPRING_APPLICATION_NAME=MathExpAssistant|SPRING_PROFILES_ACTIVE=prod,cloud-run|USE_AWS_SECRETS=false|JWT_EXPIRATION=$JWT_EXPIRATION|MONGODB_DATABASE=$MONGODB_DATABASE|OAUTH_GOOGLE_REDIRECT_URI=$OAUTH_GOOGLE_REDIRECT_URI|FRONTEND_BASE_URL=$FRONTEND_BASE_URL|APP_CORS_ALLOWED_ORIGINS=$APP_CORS_ALLOWED_ORIGINS" \
             --update-secrets "MONGO_URI=math-assistant-mongo-uri:latest,JWT_SECRET=math-assistant-jwt-secret:latest,OAUTH_GOOGLE_CLIENT_ID=math-assistant-google-client-id:latest,OAUTH_GOOGLE_CLIENT_SECRET=math-assistant-google-client-secret:latest,ADMIN_CREDS=math-assistant-admin-creds:latest" \
             --quiet

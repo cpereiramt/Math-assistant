@@ -8,7 +8,6 @@ import com.claySoftware.MathExpAssistant.models.FormulaCommentResponse;
 import com.claySoftware.MathExpAssistant.models.FormulaRatingRequest;
 import com.claySoftware.MathExpAssistant.models.ExecuteFormulaRequest;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
-import com.claySoftware.MathExpAssistant.services.PlanLimits;
 import com.claySoftware.MathExpAssistant.models.FormulaPreviewRequest;
 import com.claySoftware.MathExpAssistant.models.FormulaGroup;
 import com.claySoftware.MathExpAssistant.models.FormulaSearchResponse;
@@ -50,17 +49,14 @@ public class FormulaController {
     private final FormulaRepository formulaRepository;
     private final CommunityTransactions transactions;
     private final CommunityEvents events;
-    private final PlanLimits planLimits;
 
     public FormulaController(
             FormulaService formulaService,
             FormulaSocialService formulaSocialService,
-            FormulaRepository formulaRepository, CommunityTransactions transactions, CommunityEvents events,
-            PlanLimits planLimits) {
+            FormulaRepository formulaRepository, CommunityTransactions transactions, CommunityEvents events) {
         this.formulaRepository = formulaRepository;
         this.transactions = transactions;
         this.events = events;
-        this.planLimits = planLimits;
         this.formulaService = formulaService;
         this.formulaSocialService = formulaSocialService;
     }
@@ -68,8 +64,7 @@ public class FormulaController {
     @PostMapping("/execute")
     @RateLimiter(name = "publicApi", fallbackMethod = "rateLimitFallback")
     @Bulkhead(name = "publicApi", fallbackMethod = "bulkheadFallback")
-    public String executeFormula(@RequestBody ExecuteFormulaRequest request, Authentication authentication) {
-        planLimits.consumeExecution(currentUser(authentication));
+    public String executeFormula(@RequestBody ExecuteFormulaRequest request) {
         return formulaService.executeFormula(request);
     }
 
@@ -77,9 +72,7 @@ public class FormulaController {
     public String executeMyFormula(
             @RequestBody ExecuteFormulaRequest request,
             Authentication authentication) {
-        String user = currentUser(authentication);
-        planLimits.consumeExecution(user);
-        return formulaService.executeUserFormula(request, user);
+        return formulaService.executeUserFormula(request, currentUser(authentication));
     }
 
     @PostMapping("/insert")
@@ -156,8 +149,7 @@ public class FormulaController {
             @RequestBody @Validated FormulaEntity formulaEntity,
             Authentication authentication) {
         String owner = currentUser(authentication);
-        return planLimits.createPrivateFormula(owner,
-                () -> requireValidWrite(formulaService.insertUserFormula(formulaEntity, owner, owner)));
+        return requireValidWrite(formulaService.insertUserFormula(formulaEntity, owner, owner));
     }
 
     @PutMapping("/mine/{id}")
@@ -285,9 +277,7 @@ public class FormulaController {
     public Map<String, Object> previewBuilderFormula(@RequestBody FormulaPreviewRequest request,
                                                      @RequestParam(required = false) String formulaId,
                                                      Authentication authentication) {
-        FormulaEntity context = editContext(formulaId, authentication);
-        planLimits.consumeBuilderPreview(currentUser(authentication));
-        return formulaService.previewUserFormula(request, context);
+        return formulaService.previewUserFormula(request, editContext(formulaId, authentication));
     }
 
     private FormulaEntity editContext(String id, Authentication authentication) {
@@ -309,13 +299,13 @@ public class FormulaController {
         return authentication == null ? "" : authentication.getName();
     }
 
-    private String rateLimitFallback(ExecuteFormulaRequest request, Authentication authentication, RequestNotPermitted ex) {
+    private String rateLimitFallback(ExecuteFormulaRequest request, RequestNotPermitted ex) {
         throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
                 "Too Many Requests", ex);
     }
 
-    private String bulkheadFallback(ExecuteFormulaRequest request, Authentication authentication, BulkheadFullException ex) {
+    private String bulkheadFallback(ExecuteFormulaRequest request, BulkheadFullException ex) {
         throw new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.TOO_MANY_REQUESTS,
                 "Server busy", ex);

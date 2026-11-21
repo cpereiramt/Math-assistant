@@ -3,7 +3,6 @@ package com.claySoftware.MathExpAssistant.controllers;
 import com.claySoftware.MathExpAssistant.models.UserPlan;
 import com.claySoftware.MathExpAssistant.models.UserProfileResponse;
 import com.claySoftware.MathExpAssistant.services.UserService;
-import com.claySoftware.MathExpAssistant.services.PlanLimits;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.Authentication;
 
@@ -27,7 +26,7 @@ class UserControllerTest {
         when(authentication.getName()).thenReturn("user@example.com");
         when(userService.getCurrentUserProfile("user@example.com")).thenReturn(expected);
 
-        UserProfileResponse response = new UserController(userService, mock(PlanLimits.class)).getCurrentUser(authentication);
+        UserProfileResponse response = new UserController(userService).getCurrentUser(authentication);
 
         assertSame(expected, response);
         verify(userService).getCurrentUserProfile("user@example.com");
