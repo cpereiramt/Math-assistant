@@ -28,7 +28,8 @@ class FormulaSocialServiceTest {
     private final FormulaRatingRepository ratingRepository = mock(FormulaRatingRepository.class);
     private final FormulaCommentRepository commentRepository = mock(FormulaCommentRepository.class);
     private final FormulaSocialService service = new FormulaSocialService(
-            formulaRepository, ratingRepository, commentRepository);
+            formulaRepository, ratingRepository, commentRepository,
+            mock(CommunityEvents.class), mock(PublicAuthorService.class));
 
     private FormulaEntity formula;
 
@@ -40,7 +41,6 @@ class FormulaSocialServiceTest {
         when(formulaRepository.findByIdAndStatus(eq("formula-1"), any())).thenReturn(Optional.of(formula));
         when(ratingRepository.findByFormulaIdAndUserId(any(), any())).thenReturn(Optional.empty());
         when(ratingRepository.countByFormulaIdAndValue(any(), anyInt())).thenReturn(0L);
-        when(ratingRepository.countByFormulaId(any())).thenReturn(0L);
         when(commentRepository.countByFormulaIdAndDeletedFalse(any())).thenReturn(0L);
         when(ratingRepository.save(any(FormulaRatingEntity.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
@@ -67,7 +67,6 @@ class FormulaSocialServiceTest {
     void recalculatesCountersFromStoredRatings() {
         when(ratingRepository.countByFormulaIdAndValue("formula-1", 1)).thenReturn(3L);
         when(ratingRepository.countByFormulaIdAndValue("formula-1", -1)).thenReturn(1L);
-        when(ratingRepository.countByFormulaId("formula-1")).thenReturn(4L);
 
         FormulaEntity result = service.rate("formula-1", "user@example.com", 1);
 
@@ -114,7 +113,7 @@ class FormulaSocialServiceTest {
         when(commentRepository.countByFormulaIdAndParentCommentIdAndDeletedFalse("formula-1", "root"))
                 .thenReturn(1L);
 
-        var page = service.listComments("formula-1", PageRequest.of(0, 20));
+        var page = service.listComments("formula-1", "viewer@example.com", PageRequest.of(0, 20));
 
         assertThat(page.getTotalElements()).isEqualTo(1);
         assertThat(page.getContent()).hasSize(1);
@@ -130,7 +129,7 @@ class FormulaSocialServiceTest {
         when(commentRepository.countByFormulaIdAndParentCommentIdAndDeletedFalse("formula-1", "reply"))
                 .thenReturn(0L);
 
-        var replies = service.listReplies("formula-1", "root", PageRequest.of(0, 20));
+        var replies = service.listReplies("formula-1", "root", "viewer@example.com", PageRequest.of(0, 20));
         assertThat(replies.getContent()).extracting(FormulaCommentResponse::id).containsExactly("reply");
     }
 

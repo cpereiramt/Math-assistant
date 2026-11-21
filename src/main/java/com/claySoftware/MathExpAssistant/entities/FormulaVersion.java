@@ -31,7 +31,7 @@ public record FormulaVersion(
         FormulaExpressionNode expressionTree,
         List<FormulaSourceSnapshot> sourceSnapshots,
         Integer builderVersion,
-        String reviewedBy,
+        @JsonIgnore String reviewedBy,
         Instant reviewedAt,
         String reviewReason) {
 

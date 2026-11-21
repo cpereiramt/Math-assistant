@@ -24,6 +24,7 @@ import java.util.List;
         @CompoundIndex(name = "unique_published_formula_name", def = "{'publicationKey': 1}", unique = true,
                 partialFilter = "{'publicationKey': {'$type': 'string'}}"),
         @CompoundIndex(name = "formula_public_search", def = "{'status': 1, 'group': 1, 'variable': 1, 'name': 1}"),
+        @CompoundIndex(name = "formula_public_author", def = "{'status': 1, 'authorId': 1, 'createdAt': -1}"),
         @CompoundIndex(name = "formula_owner_search", def = "{'ownerUserId': 1, 'status': 1, 'group': 1, 'variable': 1, 'name': 1}"),
         @CompoundIndex(name = "formula_social_search", def = "{'status': 1, 'upvotes': -1, 'averageRating': -1, 'createdAt': -1}")
 })
@@ -58,10 +59,12 @@ public class FormulaEntity {
     private Integer minParameters;
     private Integer maxParameters;
 
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @JsonIgnore
     private String ownerUserId;
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @JsonIgnore
     private String ownerEmail;
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private String authorId;
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Instant createdAt;
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
@@ -86,7 +89,7 @@ public class FormulaEntity {
     private String publicationKey;
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Integer version;
-    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @JsonIgnore
     private String reviewedBy;
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Instant reviewedAt;

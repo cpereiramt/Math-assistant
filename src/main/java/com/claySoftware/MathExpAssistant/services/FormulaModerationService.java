@@ -6,19 +6,15 @@ import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.repositories.FormulaVersionStore;
 import com.claySoftware.MathExpAssistant.repositories.FormulaWrites;
-import com.mongodb.MongoException;
-import org.springframework.data.mongodb.MongoDatabaseFactory;
-import org.springframework.data.mongodb.MongoTransactionManager;
+import com.claySoftware.MathExpAssistant.entities.CommunityRecords.NotificationType;
+import com.claySoftware.MathExpAssistant.repositories.CommunityTransactions;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Supplier;
 
 @Service
 public class FormulaModerationService {
@@ -26,15 +22,20 @@ public class FormulaModerationService {
     private final FormulaWrites writes;
     private final FormulaVersionStore versions;
     private final FormulaService formulaService;
-    private final TransactionTemplate transaction;
+    private final CommunityTransactions transactions;
+    private final CommunityEvents events;
+    private final PublicAuthorService authors;
 
     public FormulaModerationService(FormulaRepository formulas, FormulaWrites writes, FormulaVersionStore versions,
-                                    FormulaService formulaService, MongoDatabaseFactory factory) {
+                                    FormulaService formulaService, CommunityTransactions transactions,
+                                    CommunityEvents events, PublicAuthorService authors) {
         this.formulas = formulas;
         this.writes = writes;
         this.versions = versions;
         this.formulaService = formulaService;
-        this.transaction = new TransactionTemplate(new MongoTransactionManager(factory));
+        this.transactions = transactions;
+        this.events = events;
+        this.authors = authors;
     }
 
     public List<FormulaEntity> pending() {
@@ -43,31 +44,40 @@ public class FormulaModerationService {
 
     public FormulaEntity approve(String id, String reviewer, String reason) {
         String justification = justification(reason);
-        return inTransaction(() -> {
+        return transactions.write(() -> {
             FormulaEntity formula = requireStatus(id, FormulaStatus.UNDER_REVIEW);
             requireValidContent(formula);
             requireAvailableName(formula);
             review(formula, FormulaStatus.PUBLIC, reviewer, justification);
+            authors.formulaAccount(formula).ifPresent(user -> formula.setAuthorId(user.getId()));
             formula.setVersion(1);
             formula.setPublicationKey(formula.getName());
             writes.replaceFromStatus(formula, FormulaStatus.UNDER_REVIEW);
             versions.append(formula);
+            notifyReview(formula, NotificationType.APPROVED);
             return formula;
         });
     }
 
     public FormulaEntity reject(String id, String reviewer, String reason) {
         String justification = justification(reason);
-        FormulaEntity formula = requireStatus(id, FormulaStatus.UNDER_REVIEW);
-        review(formula, FormulaStatus.REJECTED, reviewer, justification);
-        writes.replaceFromStatus(formula, FormulaStatus.UNDER_REVIEW);
-        return formula;
+        return transactions.write(() -> {
+            FormulaEntity formula = requireStatus(id, FormulaStatus.UNDER_REVIEW);
+            review(formula, FormulaStatus.REJECTED, reviewer, justification);
+            writes.replaceFromStatus(formula, FormulaStatus.UNDER_REVIEW);
+            notifyReview(formula, NotificationType.REJECTED);
+            return formula;
+        });
+    }
+
+    private void notifyReview(FormulaEntity formula, NotificationType type) {
+        events.notify(formula.getId(), authors.formulaRecipient(formula), null, type, formula, formula.getReviewReason());
     }
 
     public FormulaEntity revise(String id, int expectedVersion, FormulaEntity replacement,
                                 String reviewer, String reason) {
         String justification = justification(reason);
-        return inTransaction(() -> {
+        return transactions.write(() -> {
             FormulaEntity current = requireStatus(id, FormulaStatus.PUBLIC);
             if (FormulaVersion.currentNumber(current) != expectedVersion) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "expectedVersion does not match current version");
@@ -84,6 +94,7 @@ public class FormulaModerationService {
             requireAvailableName(replacement);
             replacement.setOwnerUserId(current.getOwnerUserId());
             replacement.setOwnerEmail(current.getOwnerEmail());
+            replacement.setAuthorId(current.getAuthorId());
             replacement.setCreatedAt(current.getCreatedAt());
             replacement.setUpvotes(current.getUpvotes());
             replacement.setDownvotes(current.getDownvotes());
@@ -107,7 +118,7 @@ public class FormulaModerationService {
             writes.delete(formula);
             return;
         }
-        inTransaction(() -> {
+        transactions.write(() -> {
             FormulaEntity current = requireStatus(id, FormulaStatus.PUBLIC);
             archiveLegacy(current);
             writes.delete(current);
@@ -192,17 +203,4 @@ public class FormulaModerationService {
         return reason.strip();
     }
 
-    private <T> T inTransaction(Supplier<T> action) {
-        try {
-            return Objects.requireNonNull(transaction.execute(status -> action.get()));
-        } catch (RuntimeException ex) {
-            for (Throwable cause = ex; cause != null; cause = cause.getCause()) {
-                if (cause instanceof MongoException mongo
-                        && mongo.hasErrorLabel(MongoException.TRANSIENT_TRANSACTION_ERROR_LABEL)) {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "formula changed concurrently", ex);
-                }
-            }
-            throw ex;
-        }
-    }
 }

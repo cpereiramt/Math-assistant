@@ -14,6 +14,8 @@ import com.claySoftware.MathExpAssistant.models.FormulaSearchResponse;
 import com.claySoftware.MathExpAssistant.models.FormulaSearchScope;
 import com.claySoftware.MathExpAssistant.models.FormulaType;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
+import com.claySoftware.MathExpAssistant.repositories.CommunityTransactions;
+import com.claySoftware.MathExpAssistant.services.CommunityEvents;
 import com.claySoftware.MathExpAssistant.services.FormulaService;
 import com.claySoftware.MathExpAssistant.services.FormulaSocialService;
 
@@ -45,12 +47,16 @@ public class FormulaController {
     private final FormulaService formulaService;
     private final FormulaSocialService formulaSocialService;
     private final FormulaRepository formulaRepository;
+    private final CommunityTransactions transactions;
+    private final CommunityEvents events;
 
     public FormulaController(
             FormulaService formulaService,
             FormulaSocialService formulaSocialService,
-            FormulaRepository formulaRepository) {
+            FormulaRepository formulaRepository, CommunityTransactions transactions, CommunityEvents events) {
         this.formulaRepository = formulaRepository;
+        this.transactions = transactions;
+        this.events = events;
         this.formulaService = formulaService;
         this.formulaSocialService = formulaSocialService;
     }
@@ -74,7 +80,10 @@ public class FormulaController {
     @Bulkhead(name = "publicApi", fallbackMethod = "insertBulkheadFallback")
     public String createNewFormula(@RequestBody @Validated FormulaEntity formulaEntity,
                                    Authentication authentication) {
-        String result = formulaService.insertNewFormula(formulaEntity, currentUser(authentication));
+        String result = transactions.write(() -> {
+            events.limit("publication", currentUser(authentication), 10);
+            return requireValidWrite(formulaService.insertNewFormula(formulaEntity, currentUser(authentication)));
+        });
         if (result.equals("Formula already exists")) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, result);
         }
@@ -159,7 +168,10 @@ public class FormulaController {
 
     @PostMapping("/mine/{id}/publish")
     public ResponseEntity<?> publishMyFormula(@PathVariable String id, Authentication authentication) {
-        String result = formulaService.publishUserFormula(id, currentUser(authentication));
+        String result = transactions.write(() -> {
+            events.limit("publication", currentUser(authentication), 10);
+            return formulaService.publishUserFormula(id, currentUser(authentication));
+        });
         return ResponseEntity.accepted().body(Map.of("message", result, "status", FormulaStatus.UNDER_REVIEW));
     }
 
@@ -171,14 +183,14 @@ public class FormulaController {
         if (request == null || request.value() == null) {
             throw new IllegalArgumentException("rating value is required");
         }
-        return formulaSocialService.rate(formulaId, currentUser(authentication), request.value());
+        return transactions.write(() -> formulaSocialService.rate(formulaId, currentUser(authentication), request.value()));
     }
 
     @DeleteMapping("/{formulaId}/ratings")
     public FormulaEntity removeFormulaRating(
             @PathVariable String formulaId,
             Authentication authentication) {
-        return formulaSocialService.removeRating(formulaId, currentUser(authentication));
+        return transactions.write(() -> formulaSocialService.removeRating(formulaId, currentUser(authentication)));
     }
 
     @GetMapping("/{formulaId}/comments")
@@ -191,7 +203,7 @@ public class FormulaController {
             throw new IllegalArgumentException("page must be non-negative and size must be between 1 and 100");
         }
         return formulaSocialService.listComments(
-                formulaId, PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+                formulaId, currentUser(authentication), PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
     }
 
     @GetMapping("/{formulaId}/comments/{commentId}/replies")
@@ -205,7 +217,7 @@ public class FormulaController {
             throw new IllegalArgumentException("page must be non-negative and size must be between 1 and 100");
         }
         return formulaSocialService.listReplies(
-                formulaId, commentId, PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt")));
+                formulaId, commentId, currentUser(authentication), PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt")));
     }
 
     @PostMapping("/{formulaId}/comments")
@@ -213,7 +225,7 @@ public class FormulaController {
             @PathVariable String formulaId,
             @Valid @RequestBody FormulaCommentRequest request,
             Authentication authentication) {
-        return formulaSocialService.addComment(formulaId, currentUser(authentication), request);
+        return transactions.write(() -> formulaSocialService.addComment(formulaId, currentUser(authentication), request));
     }
 
     @PatchMapping("/comments/{commentId}")
@@ -221,14 +233,17 @@ public class FormulaController {
             @PathVariable String commentId,
             @Valid @RequestBody FormulaCommentUpdateRequest request,
             Authentication authentication) {
-        return formulaSocialService.updateComment(commentId, currentUser(authentication), request);
+        return transactions.write(() -> formulaSocialService.updateComment(commentId, currentUser(authentication), request));
     }
 
     @DeleteMapping("/comments/{commentId}")
     public ResponseEntity<Void> deleteFormulaComment(
             @PathVariable String commentId,
             Authentication authentication) {
-        formulaSocialService.deleteComment(commentId, currentUser(authentication));
+        transactions.write(() -> {
+            formulaSocialService.deleteComment(commentId, currentUser(authentication));
+            return null;
+        });
         return ResponseEntity.noContent().build();
     }
 

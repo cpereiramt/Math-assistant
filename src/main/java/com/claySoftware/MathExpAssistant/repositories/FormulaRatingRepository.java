@@ -10,5 +10,4 @@ public interface FormulaRatingRepository extends MongoRepository<FormulaRatingEn
 
     long countByFormulaIdAndValue(String formulaId, int value);
 
-    long countByFormulaId(String formulaId);
 }

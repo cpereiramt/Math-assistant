@@ -1,6 +1,8 @@
 package com.claySoftware.MathExpAssistant.services;
 
 import com.claySoftware.MathExpAssistant.entities.FormulaCommentEntity;
+import com.claySoftware.MathExpAssistant.entities.CommunityRecords.NotificationType;
+import com.claySoftware.MathExpAssistant.entities.UserEntity;
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
 import com.claySoftware.MathExpAssistant.entities.FormulaRatingEntity;
 import com.claySoftware.MathExpAssistant.exceptions.SocialAccessDeniedException;
@@ -28,14 +30,18 @@ public class FormulaSocialService {
     private final FormulaRepository formulaRepository;
     private final FormulaRatingRepository ratingRepository;
     private final FormulaCommentRepository commentRepository;
+    private final CommunityEvents events;
+    private final PublicAuthorService authors;
 
     public FormulaSocialService(
             FormulaRepository formulaRepository,
             FormulaRatingRepository ratingRepository,
-            FormulaCommentRepository commentRepository) {
+            FormulaCommentRepository commentRepository, CommunityEvents events, PublicAuthorService authors) {
         this.formulaRepository = formulaRepository;
         this.ratingRepository = ratingRepository;
         this.commentRepository = commentRepository;
+        this.events = events;
+        this.authors = authors;
     }
 
     public FormulaEntity rate(String formulaId, String userId, int value) {
@@ -45,12 +51,18 @@ public class FormulaSocialService {
         }
 
         FormulaEntity formula = publicFormula(formulaId);
-        if (userId.equals(formula.getOwnerUserId())) {
+        if (userId.equals(formula.getOwnerUserId()) || userId.equals(formula.getOwnerEmail())
+                || userId.equals(owner(formula))) {
             throw new SocialAccessDeniedException("formula owners cannot rate their own formulas");
         }
 
         FormulaRatingEntity rating = ratingRepository.findByFormulaIdAndUserId(formulaId, userId)
                 .orElseGet(FormulaRatingEntity::new);
+        if (rating.getCreatedAt() != null && rating.getValue() == value) {
+            return formula;
+        }
+        events.limit("rating", userId, 100);
+        boolean firstRating = rating.getCreatedAt() == null;
         rating.setFormulaId(formulaId);
         rating.setUserId(userId);
         rating.setValue(value);
@@ -59,40 +71,51 @@ public class FormulaSocialService {
         }
         rating.setUpdatedAt(Instant.now());
         ratingRepository.save(rating);
+        if (firstRating) {
+            events.notify(CommunityEvents.key(formulaId, userId), owner(formula), userId,
+                    NotificationType.RATING, formula, null);
+        }
         return refreshMetrics(formula);
     }
 
     public FormulaEntity removeRating(String formulaId, String userId) {
         requireUser(userId);
         FormulaEntity formula = publicFormula(formulaId);
-        ratingRepository.findByFormulaIdAndUserId(formulaId, userId)
-                .ifPresent(ratingRepository::delete);
+        ratingRepository.findByFormulaIdAndUserId(formulaId, userId).filter(rating -> rating.getValue() != 0).ifPresent(rating -> {
+            events.limit("rating", userId, 100);
+            rating.setValue(0);
+            rating.setUpdatedAt(Instant.now());
+            ratingRepository.save(rating);
+        });
         return refreshMetrics(formula);
     }
 
-    public Page<FormulaCommentResponse> listComments(String formulaId, Pageable pageable) {
+    public Page<FormulaCommentResponse> listComments(String formulaId, String viewer, Pageable pageable) {
         publicFormula(formulaId);
         return commentRepository
                 .findAllByFormulaIdAndParentCommentIdIsNullAndDeletedFalse(formulaId, pageable)
-                .map(this::toResponse);
+                .map(comment -> toResponse(comment, viewer));
     }
 
     public Page<FormulaCommentResponse> listReplies(
-            String formulaId, String parentCommentId, Pageable pageable) {
+            String formulaId, String parentCommentId, String viewer, Pageable pageable) {
         publicFormula(formulaId);
         FormulaCommentEntity parent = commentRepository.findById(parentCommentId)
                 .filter(comment -> formulaId.equals(comment.getFormulaId()) && !comment.isDeleted())
                 .orElseThrow(() -> new SocialResourceNotFoundException("parent comment not found"));
         return commentRepository
                 .findAllByFormulaIdAndParentCommentIdAndDeletedFalse(formulaId, parent.getId(), pageable)
-                .map(this::toResponse);
+                .map(comment -> toResponse(comment, viewer));
     }
 
-    private FormulaCommentResponse toResponse(FormulaCommentEntity comment) {
+    private FormulaCommentResponse toResponse(FormulaCommentEntity comment, String viewer) {
+        var author = authors.account(comment.getUserId());
         return new FormulaCommentResponse(
                 comment.getId(),
                 comment.getFormulaId(),
-                comment.getUserId(),
+                author.map(UserEntity::getId).orElse(null),
+                author.map(PublicAuthorService::name).orElse(null),
+                comment.getUserId().equals(viewer),
                 comment.getContent(),
                 comment.getParentCommentId(),
                 comment.getCreatedAt(),
@@ -104,33 +127,39 @@ public class FormulaSocialService {
 
     public FormulaCommentEntity addComment(String formulaId, String userId, FormulaCommentRequest request) {
         requireUser(userId);
-        publicFormula(formulaId);
+        FormulaEntity formula = publicFormula(formulaId);
         if (request == null || request.content() == null || request.content().isBlank()) {
             throw new IllegalArgumentException("comment content is required");
         }
 
+        String replyAuthor = null;
         if (request.parentCommentId() != null && !request.parentCommentId().isBlank()) {
             FormulaCommentEntity parent = commentRepository.findById(request.parentCommentId())
                     .orElseThrow(() -> new SocialResourceNotFoundException("parent comment not found"));
             if (!formulaId.equals(parent.getFormulaId()) || parent.isDeleted()) {
                 throw new IllegalArgumentException("parent comment does not belong to this formula");
             }
+            replyAuthor = authors.recipient(parent.getUserId());
             if (commentDepth(parent) + 1 >= MAX_COMMENT_DEPTH) {
                 throw new IllegalArgumentException(
                         "comment thread cannot be deeper than " + MAX_COMMENT_DEPTH + " levels");
             }
         }
 
+        events.limit("comment", userId, 30);
         FormulaCommentEntity comment = new FormulaCommentEntity();
         comment.setFormulaId(formulaId);
         comment.setUserId(userId);
         comment.setContent(request.content().trim());
-        comment.setParentCommentId(request.parentCommentId());
+        comment.setParentCommentId(request.parentCommentId() == null || request.parentCommentId().isBlank()
+                ? null : request.parentCommentId());
         comment.setCreatedAt(Instant.now());
         comment.setUpdatedAt(comment.getCreatedAt());
         FormulaCommentEntity saved = commentRepository.save(comment);
 
         refreshCommentCount(formulaId);
+        events.notify(saved.getId(), owner(formula), userId, NotificationType.COMMENT, formula, null);
+        events.notify(saved.getId(), replyAuthor, userId, NotificationType.COMMENT, formula, null);
         return saved;
     }
 
@@ -162,6 +191,8 @@ public class FormulaSocialService {
         if (request == null || request.content() == null || request.content().isBlank()) {
             throw new IllegalArgumentException("comment content is required");
         }
+        publicFormula(comment.getFormulaId());
+        events.limit("comment", userId, 30);
         comment.setContent(request.content().trim());
         comment.setUpdatedAt(Instant.now());
         return commentRepository.save(comment);
@@ -195,7 +226,7 @@ public class FormulaSocialService {
     private FormulaEntity refreshMetrics(FormulaEntity formula) {
         long upvotes = ratingRepository.countByFormulaIdAndValue(formula.getId(), 1);
         long downvotes = ratingRepository.countByFormulaIdAndValue(formula.getId(), -1);
-        long total = ratingRepository.countByFormulaId(formula.getId());
+        long total = upvotes + downvotes;
         formula.setUpvotes(upvotes);
         formula.setDownvotes(downvotes);
         formula.setRatingCount(total);
@@ -205,6 +236,10 @@ public class FormulaSocialService {
         formulaRepository.updateMetrics(formula.getId(), upvotes, downvotes, total, formula.getAverageRating(),
                 formula.getCommentCount(), formula.getUpdatedAt());
         return formula;
+    }
+
+    private String owner(FormulaEntity formula) {
+        return authors.formulaRecipient(formula);
     }
 
     private void requireUser(String userId) {

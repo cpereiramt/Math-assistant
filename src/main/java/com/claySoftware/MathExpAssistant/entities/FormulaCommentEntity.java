@@ -1,5 +1,6 @@
 package com.claySoftware.MathExpAssistant.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.data.annotation.Id;
@@ -17,6 +18,7 @@ public class FormulaCommentEntity {
     private String id;
 
     private String formulaId;
+    @JsonIgnore
     private String userId;
     private String content;
     private String parentCommentId;

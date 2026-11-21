@@ -78,6 +78,10 @@ public class SecurityConfig {
                                                             && adminBypass.isAdminEmail(principal.getName()));
                                                 })
 
+                                                .requestMatchers(HttpMethod.GET, "/api/authors/me").authenticated()
+                                                .requestMatchers(HttpMethod.GET, "/api/authors/*",
+                                                        "/api/authors/*/formulas", "/api/authors/by-formula/*").permitAll()
+
                                                 // API protegida por JWT
                                                 .requestMatchers("/api/**").authenticated()
 
@@ -107,7 +111,7 @@ public class SecurityConfig {
         .map(String::trim)
         .filter(origin -> !origin.isBlank())
         .toList());
-    config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+    config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     config.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin"));
     config.setAllowCredentials(true);
 

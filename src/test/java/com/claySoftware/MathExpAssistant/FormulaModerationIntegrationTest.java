@@ -2,6 +2,7 @@ package com.claySoftware.MathExpAssistant;
 
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
 import com.claySoftware.MathExpAssistant.entities.FormulaVersion;
+import com.claySoftware.MathExpAssistant.entities.UserEntity;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.repositories.FormulaVersionStore;
 import com.claySoftware.MathExpAssistant.services.JwtTokenProvider;
@@ -25,6 +26,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
@@ -73,7 +76,7 @@ class FormulaModerationIntegrationTest {
                 """);
         call(get(API + "/mine/" + id), OWNER).andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PRIVATE")).andExpect(jsonPath("$.version").doesNotExist())
-                .andExpect(jsonPath("$.reviewedBy").doesNotExist()).andExpect(jsonPath("$.ownerUserId").value(OWNER));
+                .andExpect(jsonPath("$.reviewedBy").doesNotExist()).andExpect(jsonPath("$.ownerUserId").doesNotExist());
         call(get(API + "/status/PRIVATE"), "other@example.com").andExpect(status().isForbidden());
         call(get(API + "/status/UNDER_REVIEW"), OWNER).andExpect(status().isForbidden());
         call(get(API + "/status/unknown"), OWNER).andExpect(status().isBadRequest());
@@ -102,7 +105,7 @@ class FormulaModerationIntegrationTest {
         submit(rejected);
         call(post(API + "/admin/" + rejected + "/reject").content(REVIEW), ADMIN).andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REJECTED"))
-                .andExpect(jsonPath("$.reviewedBy").value(ADMIN))
+                .andExpect(jsonPath("$.reviewedBy").doesNotExist())
                 .andExpect(jsonPath("$.reviewedAt").exists());
         assertThat(versions.history(rejected)).isEmpty();
         call(post(API + "/admin/" + rejected + "/approve").content(REVIEW), ADMIN).andExpect(status().isConflict());
@@ -127,7 +130,7 @@ class FormulaModerationIntegrationTest {
                 ADMIN).andExpect(status().isBadRequest());
         call(put(API + "/admin/" + source + "/revision").content(revision(1, textFormula("Versioned source", "X+10"))),
                 ADMIN).andExpect(status().isOk()).andExpect(jsonPath("$.version").value(2))
-                .andExpect(jsonPath("$.reviewedBy").value(ADMIN));
+                .andExpect(jsonPath("$.reviewedBy").doesNotExist());
         call(put(API + "/admin/" + source + "/revision").content(revision(1, textFormula("Versioned source", "X+20"))),
                 ADMIN).andExpect(status().isConflict());
         assertResult("PINNED COMPOSITE", "3.0");
@@ -223,6 +226,185 @@ class FormulaModerationIntegrationTest {
         assertThat(mongo.findById(id, FormulaEntity.class).getStatus()).isEqualTo(FormulaStatus.UNDER_REVIEW);
     }
 
+    @Test
+    void connectsPublicationProfilesAndFollowsAndDeduplicatesConcurrentViews() throws Exception {
+        String ownerId = account(OWNER, "Formula author");
+        String reader = "community-reader@example.com";
+        account(reader, "Community reader");
+        call(put("/api/authors/me").content("""
+                {"name":"Algebra author","bio":"I write about algebra","website":"https://example.com"}
+                """), OWNER).andExpect(status().isOk());
+        String id = draft("Profile and concurrent views", "");
+        submit(id);
+        approve(id);
+
+        mvc.perform(get("/api/authors/by-formula/" + id)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(ownerId))
+                .andExpect(jsonPath("$.name").value("Algebra author"))
+                .andExpect(jsonPath("$.email").doesNotExist());
+        mvc.perform(get("/api/authors/" + ownerId + "/formulas")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].id").value(org.hamcrest.Matchers.hasItem(id)))
+                .andExpect(jsonPath("$.content[0].ownerEmail").doesNotExist());
+
+        for (int i = 0; i < 2; i++) {
+            call(put("/api/authors/" + ownerId + "/follow"), reader).andExpect(status().isNoContent());
+        }
+        call(get("/api/authors/" + ownerId), reader).andExpect(status().isOk())
+                .andExpect(jsonPath("$.followers").value(1)).andExpect(jsonPath("$.following").value(true));
+        call(put("/api/authors/" + ownerId + "/follow"), OWNER).andExpect(status().isBadRequest());
+        call(delete("/api/authors/" + ownerId + "/follow"), reader).andExpect(status().isNoContent());
+        mvc.perform(get("/api/authors/" + ownerId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.followers").value(0));
+
+        call(get(API + "/" + id), reader).andExpect(jsonPath("$.viewCount").value(0));
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var requests = java.util.stream.IntStream.range(0, 4).mapToObj(ignored -> executor.submit(() -> {
+                start.await();
+                return call(post(API + "/" + id + "/views"), reader).andReturn().getResponse().getStatus();
+            })).toList();
+            start.countDown();
+            for (var request : requests) {
+                assertThat(request.get()).isEqualTo(204);
+            }
+        }
+        call(get(API + "/" + id), reader).andExpect(jsonPath("$.viewCount").value(1));
+
+        String legacyId = mongo.getCollection("formulas").insertOne(new Document("name", "LEGACY AUTHOR")
+                .append("status", "PUBLIC").append("ownerUserId", OWNER))
+                .getInsertedId().asObjectId().getValue().toHexString();
+        mvc.perform(get("/api/authors/by-formula/" + legacyId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(ownerId));
+    }
+
+    @Test
+    void ranksEligibleVotesAndRestrictsModerationAndNotifications() throws Exception {
+        account(OWNER, "Formula author");
+        String reader = "moderation-reader@example.com";
+        String readerId = account(reader, "Reviewer");
+        String newcomer = "new-reader@example.com";
+        account(newcomer, "New reviewer");
+        mongo.getCollection("users").updateOne(new Document("email", newcomer),
+                new Document("$set", new Document("createdAt", new Date())));
+
+        String id = draft("Ranked formula with reports", "");
+        submit(id);
+        approve(id);
+        String rejected = draft("Rejected community test", "");
+        submit(rejected);
+        call(post(API + "/admin/" + rejected + "/reject").content(REVIEW), ADMIN).andExpect(status().isOk());
+
+        call(post(API + "/" + id + "/ratings").content("{\"value\":1}"), newcomer).andExpect(status().isOk());
+        call(get(API + "/ranking?days=7"), reader).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].id").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(id))));
+        call(post(API + "/" + id + "/ratings").content("{\"value\":1}"), reader).andExpect(status().isOk());
+        call(get(API + "/ranking?days=7"), reader).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].id").value(org.hamcrest.Matchers.hasItem(id)));
+        mongo.getCollection("formula_ratings").updateOne(new Document("formulaId", id).append("userId", reader),
+                new Document("$set", new Document("createdAt", Date.from(Instant.now().minus(8, ChronoUnit.DAYS)))));
+        call(delete(API + "/" + id + "/ratings"), reader).andExpect(status().isOk());
+        call(post(API + "/" + id + "/ratings").content("{\"value\":1}"), reader).andExpect(status().isOk());
+        call(get(API + "/ranking?days=7"), reader).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].id").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(id))));
+        call(get(API + "/ranking?days=30"), reader).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].id").value(org.hamcrest.Matchers.hasItem(id)));
+
+        var comment = payload(call(post(API + "/" + id + "/comments").content("{\"content\":\"Incorrect comment\"}"), reader)
+                .andExpect(status().isOk()));
+        String commentId = comment.get("id").asText();
+        call(get(API + "/" + id + "/comments"), reader).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].authorId").value(readerId))
+                .andExpect(jsonPath("$.content[0].own").value(true))
+                .andExpect(jsonPath("$.content[0].userId").doesNotExist());
+
+        String mathReport = """
+                {"reason":"MATH_ERROR","details":"With X=2 the expected result is 4"}
+                """;
+        call(post(API + "/" + id + "/reports").content(mathReport), OWNER).andExpect(status().isForbidden());
+        for (int i = 0; i < 2; i++) {
+            call(post(API + "/comments/" + commentId + "/reports").content(mathReport), OWNER)
+                    .andExpect(status().isAccepted());
+        }
+        call(get(API + "/admin/reports"), reader).andExpect(status().isForbidden());
+        removeReported(commentId);
+        call(get(API + "/" + id + "/comments"), reader).andExpect(jsonPath("$.totalElements").value(0));
+        call(get(API + "/" + id), reader).andExpect(jsonPath("$.commentCount").value(0));
+
+        call(post(API + "/" + id + "/reports").content(mathReport), reader).andExpect(status().isAccepted());
+        String originalReport = openReport(id);
+        call(put(API + "/admin/" + id + "/revision")
+                .content(revision(1, textFormula("Ranked formula with reports", "X+2"))), ADMIN)
+                .andExpect(status().isOk());
+        call(put(API + "/admin/reports/" + originalReport).content("""
+                {"decision":"REMOVED","reason":"This report concerns the earlier revision"}
+                """), ADMIN).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("reported content changed or is no longer public"));
+        call(put(API + "/admin/reports/" + originalReport).content("""
+                {"decision":"DISMISSED","reason":"The reported revision was superseded"}
+                """), ADMIN).andExpect(status().isNoContent());
+        call(post(API + "/" + id + "/reports").content(mathReport), reader).andExpect(status().isAccepted());
+        removeReported(id);
+        call(get(API + "/" + id), reader).andExpect(status().isNotFound());
+        call(get(API + "/" + id + "/versions/1"), reader).andExpect(status().isNotFound());
+        call(get(API + "/ranking?days=30"), reader).andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].id").value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.hasItem(id))));
+
+        JsonNode inbox = payload(call(get("/api/notifications?size=100"), OWNER).andExpect(status().isOk()));
+        var types = new java.util.ArrayList<String>();
+        String approval = null;
+        for (JsonNode notification : inbox.get("content")) {
+            if (List.of(id, rejected).contains(notification.get("formulaId").asText())) {
+                types.add(notification.get("type").asText());
+                if ("APPROVED".equals(notification.get("type").asText())) approval = notification.get("id").asText();
+            }
+        }
+        assertThat(types).containsExactlyInAnyOrder("APPROVED", "REJECTED", "COMMENT", "RATING", "RATING", "CONTENT_REMOVED");
+        var notice = mongo.getCollection("community_notifications").find(new Document("_id", approval));
+        call(put("/api/notifications/" + approval + "/read"), reader).andExpect(status().isNoContent());
+        assertThat(notice.first().getDate("readAt")).isNull();
+        call(put("/api/notifications/" + approval + "/read"), OWNER).andExpect(status().isNoContent());
+        assertThat(notice.first().getDate("readAt")).isNotNull();
+    }
+
+    private String openReport(String targetId) throws Exception {
+        JsonNode queue = payload(call(get(API + "/admin/reports"), ADMIN).andExpect(status().isOk()));
+        String reportId = null;
+        int matches = 0;
+        for (JsonNode report : queue.get("content")) {
+            if (targetId.equals(report.get("targetId").asText())) {
+                reportId = report.get("id").asText();
+                matches++;
+            }
+        }
+        assertThat(matches).isEqualTo(1);
+        return reportId;
+    }
+
+    private void removeReported(String targetId) throws Exception {
+        call(put(API + "/admin/reports/" + openReport(targetId)).content("""
+                {"decision":"REMOVED","reason":"Confirmed against the reference"}
+                """), ADMIN).andExpect(status().isNoContent());
+    }
+
+    private String account(String email, String name) {
+        UserEntity user = mongo.findOne(org.springframework.data.mongodb.core.query.Query.query(
+                org.springframework.data.mongodb.core.query.Criteria.where("email").is(email)), UserEntity.class);
+        if (user != null) {
+            return user.getId();
+        }
+        user = new UserEntity();
+        user.setEmail(email);
+        user.setName(name);
+        user.setProvider("google");
+        user.setProviderUserId(email);
+        user.setCreatedAt(Instant.now().minus(60, ChronoUnit.DAYS));
+        return mongo.insert(user).getId();
+    }
+
+    private JsonNode payload(ResultActions result) throws Exception {
+        return json.readTree(result.andReturn().getResponse().getContentAsString());
+    }
+
     private ResultActions call(MockHttpServletRequestBuilder request, String user) throws Exception {
         String token = Jwts.builder().setSubject(user).claim("email", user).claim("role", "ADMIN")
                 .setExpiration(new Date(System.currentTimeMillis() + 60_000))
@@ -255,7 +437,7 @@ class FormulaModerationIntegrationTest {
     private void approve(String id) throws Exception {
         call(post(API + "/admin/" + id + "/approve").content(REVIEW), ADMIN).andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("PUBLIC")).andExpect(jsonPath("$.version").value(1))
-                .andExpect(jsonPath("$.reviewedBy").value(ADMIN));
+                .andExpect(jsonPath("$.reviewedBy").doesNotExist());
     }
 
     private void assertPinned(String composite, int version) throws Exception {
