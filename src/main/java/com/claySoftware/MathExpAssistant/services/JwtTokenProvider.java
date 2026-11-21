@@ -5,11 +5,9 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
-import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.stereotype.Service;
 
 import com.claySoftware.MathExpAssistant.entities.UserEntity;
-import com.claySoftware.MathExpAssistant.models.UserPlan;
 import com.claySoftware.MathExpAssistant.utils.AdminBypass;
 
 import java.util.Date;
@@ -48,16 +46,15 @@ public class JwtTokenProvider {
             throw new IllegalArgumentException(
                     "Unexpected principal type: " + authentication.getPrincipal().getClass());
         }
-        UserPlan effectivePlan = adminBypass.effectivePlan(email);
         String role = adminBypass.isAdminEmail(email) ? "ADMIN" : "USER";
 
-        userService.upsertOAuthUser(sub, email, username, pictureUrl, effectivePlan.name(), role);
+        UserEntity user = userService.upsertOAuthUser(sub, email, username, pictureUrl, role);
 
         return Jwts.builder()
                 .setSubject(email)
                 .claim("name", username)
                 .claim("email", email)
-                .claim("plan", effectivePlan.name())
+                .claim("plan", userService.effectivePlan(user).name())
                 .claim("role", role)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date((new Date()).getTime() + jwtExpiration))

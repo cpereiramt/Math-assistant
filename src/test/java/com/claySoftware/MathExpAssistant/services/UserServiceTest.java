@@ -5,6 +5,13 @@ import com.claySoftware.MathExpAssistant.exceptions.UserNotFoundException;
 import com.claySoftware.MathExpAssistant.models.UserPlan;
 import com.claySoftware.MathExpAssistant.models.UserProfileResponse;
 import com.claySoftware.MathExpAssistant.repositories.UserRepository;
+import com.claySoftware.MathExpAssistant.utils.AdminBypass;
+import org.bson.Document;
+import org.mockito.ArgumentCaptor;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,6 +21,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,11 +34,17 @@ class UserServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private MongoTemplate mongo;
+
+    @Mock
+    private AdminBypass adminBypass;
+
     private UserService userService;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository);
+        userService = new UserService(userRepository, mongo, adminBypass);
     }
 
     @Test
@@ -55,26 +71,23 @@ class UserServiceTest {
     }
 
     @Test
-    void shouldSynchronizeOAuthProfileOnLogin() {
-        UserEntity user = user("old@example.com");
-        when(userRepository.findByProviderUserId("google-sub")).thenReturn(Optional.of(user));
-        when(userRepository.save(user)).thenReturn(user);
+    void oauthLoginRefreshesProfileAndInitializesPlanOnlyOnInsert() {
+        UserEntity premium = user("user@example.com");
+        premium.setPlan(UserPlan.PREMIUM);
+        when(mongo.findAndModify(any(Query.class), any(Update.class), any(FindAndModifyOptions.class),
+                eq(UserEntity.class))).thenReturn(premium);
 
         UserEntity saved = userService.upsertOAuthUser(
-                "google-sub",
-                "new@example.com",
-                "Updated Name",
-                "https://example.com/new-picture.jpg",
-                "PREMIUM",
-                "ADMIN");
+                "google-sub", "user@example.com", "Updated Name", null, "USER");
 
-        assertEquals("google", saved.getProvider());
-        assertEquals("new@example.com", saved.getEmail());
-        assertEquals("Updated Name", saved.getName());
-        assertEquals("https://example.com/new-picture.jpg", saved.getPictureUrl());
-        assertEquals(UserPlan.PREMIUM, saved.getPlan());
-        assertEquals("ADMIN", saved.getRole());
-        verify(userRepository).save(user);
+        ArgumentCaptor<Update> update = ArgumentCaptor.forClass(Update.class);
+        verify(mongo).findAndModify(any(Query.class), update.capture(), any(FindAndModifyOptions.class),
+                eq(UserEntity.class));
+        Document changes = update.getValue().getUpdateObject();
+        assertEquals("Updated Name", changes.get("$set", Document.class).get("name"));
+        assertFalse(changes.get("$set", Document.class).containsKey("plan"));
+        assertEquals(UserPlan.FREE, changes.get("$setOnInsert", Document.class).get("plan"));
+        assertEquals(UserPlan.PREMIUM, userService.effectivePlan(saved));
     }
 
     private UserEntity user(String email) {

@@ -8,6 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -59,13 +60,36 @@ public class CommunityEvents {
 
     public void limit(String action, String actor, int limit) {
         Instant now = Instant.now();
-        String bucket = key(action, actor, now.truncatedTo(ChronoUnit.DAYS).toString());
+        String bucket = dailyBucket(action, actor, now);
         Quota quota = mongo.findAndModify(Query.query(Criteria.where("id").is(bucket)),
                 new Update().inc("count", 1).setOnInsert("createdAt", now),
                 FindAndModifyOptions.options().upsert(true).returnNew(true), Quota.class);
         if (quota.count() > limit) {
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "daily " + action + " limit reached");
         }
+    }
+
+    public void consume(String action, String actor, int limit) {
+        Instant now = Instant.now();
+        Query available = Query.query(Criteria.where("id").is(dailyBucket(action, actor, now))
+                .and("count").lt(limit));
+        Update increment = new Update().inc("count", 1).setOnInsert("createdAt", now);
+        try {
+            mongo.upsert(available, increment, Quota.class);
+        } catch (DuplicateKeyException existingBucket) {
+            if (mongo.updateFirst(available, increment, Quota.class).getMatchedCount() == 0) {
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "daily " + action + " limit reached");
+            }
+        }
+    }
+
+    public int usage(String action, String actor) {
+        Quota quota = mongo.findById(dailyBucket(action, actor, Instant.now()), Quota.class);
+        return quota == null ? 0 : quota.count();
+    }
+
+    private String dailyBucket(String action, String actor, Instant now) {
+        return key(action, actor, now.truncatedTo(ChronoUnit.DAYS).toString());
     }
 
     static String key(String... parts) {

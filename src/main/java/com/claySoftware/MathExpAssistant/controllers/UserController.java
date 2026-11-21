@@ -1,7 +1,9 @@
 package com.claySoftware.MathExpAssistant.controllers;
 
+import com.claySoftware.MathExpAssistant.models.PlanUsage;
 import com.claySoftware.MathExpAssistant.models.UserProfileResponse;
 import com.claySoftware.MathExpAssistant.services.UserService;
+import com.claySoftware.MathExpAssistant.services.PlanLimits;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -16,8 +18,11 @@ public class UserController {
 
     private final UserService userService;
 
-    public UserController(UserService userService) {
+    private final PlanLimits planLimits;
+
+    public UserController(UserService userService, PlanLimits planLimits) {
         this.userService = userService;
+        this.planLimits = planLimits;
     }
 
     @Operation(summary = "Return the authenticated user's profile")
@@ -28,6 +33,10 @@ public class UserController {
     })
     @GetMapping("/me")
     public UserProfileResponse getCurrentUser(Authentication authentication) {
-        return userService.getCurrentUserProfile(authentication.getName());
+        String email = authentication.getName();
+        UserProfileResponse profile = userService.getCurrentUserProfile(email);
+        PlanUsage usage = planLimits.usage(email);
+        return usage == null ? profile : new UserProfileResponse(profile.name(), profile.email(), profile.pictureUrl(),
+                profile.plan(), profile.role(), usage);
     }
 }

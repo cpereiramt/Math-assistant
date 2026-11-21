@@ -40,6 +40,8 @@ public interface FormulaRepository extends MongoRepository<FormulaEntity, String
 
         List<FormulaEntity> findAllByOwnerUserId(String ownerUserId);
 
+    long countByOwnerUserIdAndStatus(String ownerUserId, FormulaStatus status);
+
         @Query("{'status': 'PUBLIC', '$or': [{'authorId': ?0}, {'authorId': null, '$or': [{'ownerUserId': {'$in': [?0, ?1]}}, {'ownerEmail': ?1}]}]}")
         Page<FormulaEntity> findPublications(String userId, String email, Pageable page);
 
