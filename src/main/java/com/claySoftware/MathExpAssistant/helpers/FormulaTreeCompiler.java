@@ -8,6 +8,7 @@ import com.claySoftware.MathExpAssistant.models.FormulaCompilationResult;
 import com.claySoftware.MathExpAssistant.models.FormulaExpressionNode;
 import com.claySoftware.MathExpAssistant.models.FormulaSourceSnapshot;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
+import com.claySoftware.MathExpAssistant.models.MeasurementUnit;
 import com.claySoftware.MathExpAssistant.repositories.FormulaRepository;
 import com.claySoftware.MathExpAssistant.repositories.FormulaVersionStore;
 import com.claySoftware.MathExpAssistant.utils.FormulaNormalizer;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -29,6 +31,8 @@ public class FormulaTreeCompiler {
     private static final int MAX_DEPTH = 30;
     private static final int MAX_NODES = 250;
     private static final int MAX_EQUATION_LENGTH = 10_000;
+    private static final Pattern EXPRESSION_TOKENS = Pattern.compile(
+            "\"[^\"]*\"|(?i)(?<![A-Z0-9_])[A-Z][A-Z0-9_]*(?![A-Z0-9_])");
 
     private final FormulaRepository formulaRepository;
 
@@ -94,8 +98,8 @@ public class FormulaTreeCompiler {
             throw nodeError(node, "constant value is required");
         }
         try {
-            return new BigDecimal(node.getConstantValue().trim()).stripTrailingZeros().toPlainString();
-        } catch (NumberFormatException ex) {
+            return DecimalCalculation.decimal(new BigDecimal(node.getConstantValue().trim())).stripTrailingZeros().toPlainString();
+        } catch (NumberFormatException | DecimalCalculation.Failure ex) {
             throw nodeError(node, "invalid constant value");
         }
     }
@@ -141,14 +145,17 @@ public class FormulaTreeCompiler {
         if (bindings == null) {
             throw nodeError(node, "formula parameter bindings are required");
         }
-        String expanded = source.getEquation();
+        Map<String, String> replacements = new LinkedHashMap<>();
         for (String parameter : source.getParameters()) {
             FormulaExpressionNode binding = findBinding(bindings, parameter);
             if (binding == null) {
                 throw nodeError(node, "missing binding for parameter " + parameter);
             }
             String replacement = compileNode(binding, context, depth + 1);
-            expanded = replaceVariable(expanded, parameter, "(" + replacement + ")");
+            if (source.getUnitSnapshots() != null) {
+                replacement = checkUnit(replacement, source.getUnitSnapshots().get(parameter));
+            }
+            replacements.put(parameter.toUpperCase(Locale.ROOT), "(" + replacement + ")");
         }
 
         Set<String> expected = new LinkedHashSet<>(FormulaNormalizer.normalizeParameters(source.getParameters()));
@@ -158,8 +165,16 @@ public class FormulaTreeCompiler {
             }
         }
 
+        String expanded = bindVariables(source.getEquation(), replacements);
         context.snapshots.putIfAbsent(FormulaVersion.key(source.getFormulaId(), effectiveVersion(source)), source);
+        if (source.getUnitSnapshots() != null) {
+            expanded = checkUnit(expanded, source.getUnitSnapshots().get("_result"));
+        }
         return "(" + expanded + ")";
+    }
+
+    private String checkUnit(String expression, MeasurementUnit unit) {
+        return "UNITCHECK((" + expression + "), \"" + (unit == null ? "SCALAR" : unit.dimensionKey()) + "\")";
     }
 
     private FormulaSourceSnapshot resolveSource(FormulaExpressionNode node, CompilationContext context) {
@@ -209,7 +224,7 @@ public class FormulaTreeCompiler {
             throw nodeError(node, "variadic formulas are not supported in the builder yet");
         }
         return new FormulaSourceSnapshot(source.formulaId(), source.name(), source.equation(),
-                source.parameters(), source.version());
+                source.parameters(), source.version(), source.unitSnapshots());
     }
 
     // Older snapshots may predate the live source used as catalog version 1.
@@ -226,9 +241,23 @@ public class FormulaTreeCompiler {
         return null;
     }
 
-    private String replaceVariable(String equation, String variable, String replacement) {
-        Pattern pattern = Pattern.compile("(?i)(?<![A-Za-z0-9_])" + Pattern.quote(variable) + "(?![A-Za-z0-9_])");
-        return pattern.matcher(equation).replaceAll(Matcher.quoteReplacement(replacement));
+    private String bindVariables(String equation, Map<String, String> replacements) {
+        Matcher tokens = EXPRESSION_TOKENS.matcher(equation);
+        StringBuilder bound = new StringBuilder();
+        while (tokens.find()) {
+            String token = tokens.group();
+            String replacement = replacements.get(token.toUpperCase(Locale.ROOT));
+            if (replacement == null) continue;
+            int next = tokens.end();
+            while (next < equation.length() && Character.isWhitespace(equation.charAt(next))) next++;
+            if (next < equation.length() && equation.charAt(next) == '(') continue;
+            tokens.appendReplacement(bound, Matcher.quoteReplacement(replacement));
+            if (bound.length() > MAX_EQUATION_LENGTH) {
+                throw new IllegalArgumentException("compiled equation exceeds the maximum length");
+            }
+        }
+        tokens.appendTail(bound);
+        return bound.toString();
     }
 
     private IllegalArgumentException nodeError(FormulaExpressionNode node, String message) {

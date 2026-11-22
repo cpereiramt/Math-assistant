@@ -1,6 +1,7 @@
 package com.claySoftware.MathExpAssistant.entities;
 
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
+import com.claySoftware.MathExpAssistant.models.MeasurementUnit;
 import com.claySoftware.MathExpAssistant.models.FormulaGroup;
 import com.claySoftware.MathExpAssistant.models.FormulaExpressionNode;
 import com.claySoftware.MathExpAssistant.models.FormulaInputMode;
@@ -17,6 +18,7 @@ import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @Document(collection = "formulas")
 @CompoundIndexes({
@@ -52,6 +54,11 @@ public class FormulaEntity {
     private Integer builderVersion;
 
     private List<String> parameters;
+    private Map<String, String> inputUnits;
+    private String outputUnit;
+
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    private Map<String, MeasurementUnit> unitSnapshots;
 
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private FormulaStatus status;

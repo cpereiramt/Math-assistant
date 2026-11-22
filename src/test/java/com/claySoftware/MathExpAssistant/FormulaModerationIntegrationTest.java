@@ -46,6 +46,7 @@ class FormulaModerationIntegrationTest {
     private static final String API = "/api/formulas";
     private static final String DATABASE = "formula_test_" + UUID.randomUUID().toString().replace("-", "");
     private static final String OWNER = "owner@example.com";
+    private static final String MEASURED_OWNER = "measurement-owner@example.com";
     private static final String ADMIN = "reviewer@example.com";
     private static final String REVIEW = """
             {"reason":"Checked against the reference"}
@@ -366,6 +367,114 @@ class FormulaModerationIntegrationTest {
         assertThat(notice.first().getDate("readAt")).isNotNull();
     }
 
+    @Test
+    void calculatesMeasuredFormulasAndPreservesPinnedUnitsAcrossCatalogChanges() throws Exception {
+        call(put(API + "/admin/units/L").content("""
+                {"name":"Liter","dimension":"Volume","reference":"L","factor":"1","active":true}
+                """), ADMIN).andExpect(status().isOk()).andExpect(jsonPath("$.unit.dimension").value("CUSTOM:Volume"));
+        call(put(API + "/admin/units/mL").content("""
+                {"name":"Milliliter","reference":"L","factor":"0.001","active":true}
+                """), ADMIN).andExpect(status().isOk()).andExpect(jsonPath("$.unit.dimension").value("CUSTOM:Volume"));
+        String path = API + "/admin/units/cm";
+        String centimeter = """
+                {"name":"Centimeter","reference":"m","factor":"0.01","active":true}
+                """;
+        call(put(path).content(centimeter), MEASURED_OWNER).andExpect(status().isForbidden());
+        long version = payload(call(put(path).content(centimeter), ADMIN).andExpect(status().isOk()))
+                .get("version").asLong();
+
+        String formula = """
+                {"name":"Measured length","group":"PHYSICS","equation":"X+Y","parameters":["X","Y"],
+                "inputUnits":{"X":"cm","Y":"m"},"outputUnit":"m"}
+                """;
+        String id = createDraft(formula, MEASURED_OWNER);
+        String inputs = """
+                {"formulaName":"Measured length","variables":{"X":{"value":150},"Y":{"value":"0.001","unit":"km"}}}
+                """;
+        call(post(API + "/mine/calculate").content(inputs), MEASURED_OWNER).andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value("2.5")).andExpect(jsonPath("$.unit").value("m"));
+        call(post(API + "/mine/calculate").content(inputs.replace("km", "kg")), MEASURED_OWNER)
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("validation_error"))
+                .andExpect(jsonPath("$.message").value("Y expects a unit compatible with m"));
+        call(post(API + "/builder/calculate").param("formulaId", id).content(
+                "{\"formula\":" + formula + ",\"inputs\":" + inputs + "}"), MEASURED_OWNER)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.value").value("2.5"));
+        submit(id, MEASURED_OWNER);
+        approve(id);
+
+        call(put(path).content("""
+                {"name":"Centimeter","reference":"m","factor":"0.02","active":false,"version":%d}
+                """.formatted(version)), ADMIN).andExpect(status().isOk());
+        call(put(path).content(centimeter), ADMIN).andExpect(status().isConflict());
+        call(get(API + "/units"), MEASURED_OWNER).andExpect(jsonPath("$[?(@.code == 'cm')]").isEmpty());
+        call(post(API + "/calculate").content(inputs), MEASURED_OWNER).andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value("2.5"));
+        call(get(API + "/" + id + "/versions/1"), MEASURED_OWNER)
+                .andExpect(jsonPath("$.unitSnapshots.X.factor").value("0.01"));
+    }
+
+    @Test
+    void returnsStructuredErrorsAndPreservesLegacyExecution() throws Exception {
+        createDraft(textFormula("Zero divisor", "1/(X-1)"), MEASURED_OWNER);
+        String endpoint = API + "/mine/calculate";
+        call(post(endpoint).content("""
+                {"formulaName":"Zero divisor","variables":{"X":{"value":1}}}
+                """), MEASURED_OWNER).andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.code").value("division_by_zero"));
+        call(post(endpoint).content("""
+                {"formulaName":"Missing formula","variables":{"X":{"value":1}}}
+                """), MEASURED_OWNER).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("not_found"));
+        call(post(endpoint).content("""
+                {"formulaName":"Zero divisor","variables":{"X":{"value":"NaN"}}}
+                """), MEASURED_OWNER).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("invalid_json"));
+        assertResult("Zero divisor", "1.0", MEASURED_OWNER);
+    }
+
+    @Test
+    void checksMeasuredBuilderConnectionsAndUsesPinnedDependencies() throws Exception {
+        String source = createDraft("""
+                {"name":"Measured source","group":"PHYSICS","equation":"X*2","parameters":["X"],
+                "inputUnits":{"X":"kg"},"outputUnit":"kg"}
+                """, MEASURED_OWNER);
+        submit(source, MEASURED_OWNER);
+        approve(source);
+        var compiled = json.readTree(builder("Measured builder", source, ""));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) compiled).set("inputUnits",
+                json.readTree("{\"X\":\"m\"}"));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) compiled).put("outputUnit", "kg");
+        call(post(API + "/mine").content(compiled.toString()), MEASURED_OWNER).andExpect(status().isBadRequest());
+        ((com.fasterxml.jackson.databind.node.ObjectNode) compiled).set("inputUnits",
+                json.readTree("{\"X\":\"g\"}"));
+        String id = createDraft(compiled.toString(), MEASURED_OWNER);
+        call(post(API + "/mine/calculate").content("""
+                {"formulaId":"%s","variables":{"X":{"value":"750"}}}
+                """.formatted(id)), MEASURED_OWNER).andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value("1.5")).andExpect(jsonPath("$.unit").value("kg"));
+    }
+
+    @Test
+    void acceptsMixedCompatibleUnitsForVariadicFormulas() throws Exception {
+        String definition = """
+                {"name":"Measured aggregate","group":"PHYSICS","variable":true,"equation":"SUM({VALUES})",
+                "minParameters":2,"maxParameters":10,"inputUnits":{"ITEM":"m"},"outputUnit":"m"}
+                """;
+        call(post(API + "/insert").content(definition), MEASURED_OWNER).andExpect(status().isOk());
+        JsonNode pending = payload(call(get(API + "/admin/pending"), ADMIN).andExpect(status().isOk()));
+        String id = java.util.stream.StreamSupport.stream(pending.spliterator(), false)
+                .filter(item -> item.path("name").asText().equals("MEASURED AGGREGATE"))
+                .findFirst().orElseThrow().path("id").asText();
+        approve(id);
+
+        String mixed = """
+                {"formulaId":"%s","values":[{"value":2,"unit":"km"},{"value":"350"}]}
+                """.formatted(id);
+        call(post(API + "/calculate").content(mixed), MEASURED_OWNER).andExpect(status().isOk())
+                .andExpect(jsonPath("$.value").value("2350")).andExpect(jsonPath("$.unit").value("m"));
+        call(post(API + "/admin/" + id + "/calculate-preview").content(
+                "{\"formula\":" + definition + ",\"inputs\":" + mixed + "}"), ADMIN)
+                .andExpect(status().isOk()).andExpect(jsonPath("$.value").value("2350"));
+    }
+
     private String openReport(String targetId) throws Exception {
         JsonNode queue = payload(call(get(API + "/admin/reports"), ADMIN).andExpect(status().isOk()));
         String reportId = null;
@@ -418,8 +527,12 @@ class FormulaModerationIntegrationTest {
     }
 
     private String createDraft(String body) throws Exception {
-        call(post(API + "/mine").content(body), OWNER).andExpect(status().isOk());
-        String raw = call(get(API + "/mine"), OWNER).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return createDraft(body, OWNER);
+    }
+
+    private String createDraft(String body, String owner) throws Exception {
+        call(post(API + "/mine").content(body), owner).andExpect(status().isOk());
+        String raw = call(get(API + "/mine"), owner).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
         String name = json.readTree(body).get("name").asText();
         for (JsonNode formula : json.readTree(raw)) {
             if (formula.get("name").asText().equalsIgnoreCase(name)) {
@@ -430,7 +543,11 @@ class FormulaModerationIntegrationTest {
     }
 
     private void submit(String id) throws Exception {
-        call(post(API + "/mine/" + id + "/publish"), OWNER).andExpect(status().isAccepted())
+        submit(id, OWNER);
+    }
+
+    private void submit(String id, String owner) throws Exception {
+        call(post(API + "/mine/" + id + "/publish"), owner).andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.status").value("UNDER_REVIEW"));
     }
 
@@ -446,9 +563,13 @@ class FormulaModerationIntegrationTest {
     }
 
     private void assertResult(String name, String result) throws Exception {
+        assertResult(name, result, OWNER);
+    }
+
+    private void assertResult(String name, String result, String owner) throws Exception {
         call(post(API + "/mine/execute").content("""
                 {"formulaName":"%s","variables":{"X":2}}
-                """.formatted(name)), OWNER).andExpect(status().isOk()).andExpect(content().string(result));
+                """.formatted(name)), owner).andExpect(status().isOk()).andExpect(content().string(result));
     }
 
     private String textFormula(String name, String equation) {

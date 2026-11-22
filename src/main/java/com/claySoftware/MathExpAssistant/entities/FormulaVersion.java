@@ -4,6 +4,7 @@ import com.claySoftware.MathExpAssistant.models.FormulaExpressionNode;
 import com.claySoftware.MathExpAssistant.models.FormulaGroup;
 import com.claySoftware.MathExpAssistant.models.FormulaInputMode;
 import com.claySoftware.MathExpAssistant.models.FormulaSourceSnapshot;
+import com.claySoftware.MathExpAssistant.models.MeasurementUnit;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -11,6 +12,7 @@ import org.springframework.data.mongodb.core.index.CompoundIndex;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 @Document("formula_versions")
 @CompoundIndex(name = "formula_version_history", def = "{'formulaId': 1, 'version': -1}", unique = true)
@@ -24,6 +26,9 @@ public record FormulaVersion(
         String equation,
         String displayEquation,
         List<String> parameters,
+        Map<String, String> inputUnits,
+        String outputUnit,
+        Map<String, MeasurementUnit> unitSnapshots,
         boolean variable,
         Integer minParameters,
         Integer maxParameters,
@@ -48,6 +53,7 @@ public record FormulaVersion(
         return new FormulaVersion(key(formula.getId(), number), formula.getId(), number,
                 formula.getName(), formula.getGroup(), formula.getDescription(),
                 formula.getEquation(), formula.getDisplayEquation(), formula.getParameters(),
+                formula.getInputUnits(), formula.getOutputUnit(), formula.getUnitSnapshots(),
                 formula.isVariable(), formula.getMinParameters(), formula.getMaxParameters(),
                 formula.getInputMode(), formula.getExpressionTree(), formula.getSourceSnapshots(),
                 formula.getBuilderVersion(), formula.getReviewedBy(), formula.getReviewedAt(),
