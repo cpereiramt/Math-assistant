@@ -23,7 +23,7 @@ class FormulaServiceHybridInputTest {
     private final FormulaRepository repository = mock(FormulaRepository.class);
     private final FormulaTreeCompiler treeCompiler = mock(FormulaTreeCompiler.class);
     private final FormulaService service = new FormulaService(
-            new FormulaExecutor(), repository, new FormulaValidator(), treeCompiler, mock(FormulaWrites.class));
+            new FormulaExecutor(), repository, new FormulaValidator(), treeCompiler, mock(FormulaWrites.class), new CalculationService(mock(UnitCatalog.class)));
 
     @Test
     void keepsLegacyTextPayloadCompatible() {

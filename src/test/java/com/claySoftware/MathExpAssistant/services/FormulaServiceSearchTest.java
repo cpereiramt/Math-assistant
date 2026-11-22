@@ -27,7 +27,7 @@ import static org.mockito.Mockito.when;
 class FormulaServiceSearchTest {
     private final FormulaRepository repository = mock(FormulaRepository.class);
     private final FormulaService service = new FormulaService(
-            new FormulaExecutor(), repository, new FormulaValidator(), mock(FormulaTreeCompiler.class), mock(FormulaWrites.class));
+            new FormulaExecutor(), repository, new FormulaValidator(), mock(FormulaTreeCompiler.class), mock(FormulaWrites.class), new CalculationService(mock(UnitCatalog.class)));
 
     @Test
     void searchesVariadicPublicFormulasWithPagination() {

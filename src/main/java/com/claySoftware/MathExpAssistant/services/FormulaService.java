@@ -1,12 +1,15 @@
 package com.claySoftware.MathExpAssistant.services;
 
 import com.claySoftware.MathExpAssistant.entities.FormulaEntity;
+import com.claySoftware.MathExpAssistant.helpers.DecimalCalculation;
 import com.claySoftware.MathExpAssistant.helpers.EquationBuilder;
 import com.claySoftware.MathExpAssistant.helpers.FormulaExecutor;
 import com.claySoftware.MathExpAssistant.helpers.FormulaValidator;
 import com.claySoftware.MathExpAssistant.helpers.FormulaTreeCompiler;
 import com.claySoftware.MathExpAssistant.helpers.VariableBuilder;
 import com.claySoftware.MathExpAssistant.models.ExecuteFormulaRequest;
+import com.claySoftware.MathExpAssistant.models.CalculationRequest;
+import com.claySoftware.MathExpAssistant.models.CalculationResult;
 import com.claySoftware.MathExpAssistant.models.FormulaStatus;
 import com.claySoftware.MathExpAssistant.models.FormulaCompilationResult;
 import com.claySoftware.MathExpAssistant.models.FormulaInputMode;
@@ -26,7 +29,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,18 +41,20 @@ public class FormulaService {
     private final FormulaValidator validator;
     private final FormulaTreeCompiler treeCompiler;
     private final FormulaWrites writes;
+    private final CalculationService calculations;
 
     public FormulaService(
             FormulaExecutor formulaExecutor,
             FormulaRepository formulaRepository,
             FormulaValidator validator,
             FormulaTreeCompiler treeCompiler,
-            FormulaWrites writes) {
+            FormulaWrites writes, CalculationService calculations) {
         this.formulaExecutor = formulaExecutor;
         this.formulaRepository = formulaRepository;
         this.validator = validator;
         this.treeCompiler = treeCompiler;
         this.writes = writes;
+        this.calculations = calculations;
     }
 
     public List<FormulaEntity> listPublicFormulas() {
@@ -146,6 +150,52 @@ public class FormulaService {
         return executeExistingFormula(opt.get(), req);
     }
 
+    public CalculationResult calculate(CalculationRequest request, String owner) {
+        Optional<FormulaEntity> formula;
+        if (request.formulaId() != null && !request.formulaId().isBlank()) {
+            formula = owner == null
+                    ? formulaRepository.findByIdAndStatus(request.formulaId(), FormulaStatus.PUBLIC)
+                    : formulaRepository.findByIdAndOwnerUserId(request.formulaId(), owner)
+                            .filter(item -> item.getStatus() == FormulaStatus.PRIVATE);
+        } else {
+            if (request.formulaName() == null || request.formulaName().isBlank()) {
+                throw new IllegalArgumentException("formulaId or formulaName is required");
+            }
+            String name = FormulaNormalizer.normalizeEquation(request.formulaName());
+            formula = owner == null ? formulaRepository.findByNameAndStatus(name, FormulaStatus.PUBLIC)
+                    : formulaRepository.findByNameAndOwnerUserIdAndStatus(name, owner, FormulaStatus.PRIVATE);
+        }
+        return calculations.calculate(formula.orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Formula not found")), request);
+    }
+
+    public CalculationResult calculatePreview(FormulaEntity formula, CalculationRequest request, String id,
+                                               String owner, boolean publicRevision) {
+        if (formula == null || request == null) throw new IllegalArgumentException("Formula and inputs are required");
+        FormulaEntity previous = null;
+        if (id != null) {
+            var existing = publicRevision ? formulaRepository.findByIdAndStatus(id, FormulaStatus.PUBLIC)
+                    : getUserFormula(id, owner);
+            previous = existing.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Formula not found"));
+        }
+        String error = validateCalculationPreview(formula, previous, publicRevision);
+        if (error != null) throw new IllegalArgumentException(error);
+        return calculations.calculate(formula, request);
+    }
+
+    public String validatePublicRevision(FormulaEntity formula, String id) {
+        var previous = formulaRepository.findByIdAndStatus(id, FormulaStatus.PUBLIC)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Formula not found"));
+        return validateCalculationPreview(formula, previous, true);
+    }
+
+    private String validateCalculationPreview(FormulaEntity formula, FormulaEntity previous, boolean publicRevision) {
+        if (!publicRevision) return validateUserFormula(formula, previous);
+        normalizeFormula(formula);
+        String error = prepareFormulaInput(formula, previous);
+        return error == null ? validatePublication(formula) : error;
+    }
+
     public String insertNewFormula(FormulaEntity formulaEntity, String ownerUserId) {
         formulaEntity.setStatus(FormulaStatus.UNDER_REVIEW);
         formulaEntity.setOwnerUserId(ownerUserId);
@@ -201,6 +251,9 @@ public class FormulaService {
             return Map.of("valid", false, "message", validationError);
         }
 
+        if (CalculationService.measured(formula)) {
+            return Map.of("valid", false, "message", "Use the calculation preview API for formulas with units");
+        }
         String result = executeFixed(formula, request.getVariables());
         if (result.startsWith("validation_error:") || result.startsWith("calculation_error:")
                 || result.startsWith("server_error:")) {
@@ -300,6 +353,9 @@ public class FormulaService {
     }
 
     private String executeExistingFormula(FormulaEntity formula, ExecuteFormulaRequest req) {
+        if (CalculationService.measured(formula)) {
+            return "validation_error: use the calculation API for formulas with units";
+        }
         boolean isVariadic = Boolean.TRUE.equals(formula.isVariable());
 
         if (!isVariadic) {
@@ -420,7 +476,7 @@ public class FormulaService {
             formula.setExpressionTree(null);
             formula.setSourceSnapshots(null);
             formula.setBuilderVersion(null);
-            return null;
+            return prepareUnits(formula, previous);
         }
         if (formula.isVariable()) {
             return "builder formulas must be fixed";
@@ -438,9 +494,18 @@ public class FormulaService {
             formula.setParameters(compiled.parameters());
             formula.setSourceSnapshots(compiled.sourceSnapshots());
             formula.setBuilderVersion(1);
-            return null;
+            return prepareUnits(formula, previous);
         } catch (IllegalArgumentException ex) {
             return ex.getMessage();
+        }
+    }
+
+    private String prepareUnits(FormulaEntity formula, FormulaEntity previous) {
+        try {
+            calculations.prepare(formula, previous);
+            return null;
+        } catch (IllegalArgumentException | DecimalCalculation.Failure error) {
+            return error.getMessage();
         }
     }
 
@@ -449,6 +514,7 @@ public class FormulaService {
         if (error != null) {
             return error;
         }
+        if (CalculationService.measured(formula)) return null;
         return formulaExecutor.validateSyntax(formula.isVariable()
                 ? EquationBuilder.buildVariadicEquation(formula.getEquation(), 2)
                 : formula.getEquation());
@@ -468,15 +534,8 @@ public class FormulaService {
             return validationError;
         }
 
-        try {
-            Map<String, Double> testVariables = new HashMap<>();
-            for (String parameter : formula.getParameters()) {
-                testVariables.put(parameter, 1.0);
-            }
-            formulaExecutor.executeFormula(formula.getEquation(), testVariables);
-            return null;
-        } catch (Exception e) {
-            return "invalid equation syntax: " + e.getMessage();
-        }
+        if (CalculationService.measured(formula)) return null;
+
+        return formulaExecutor.validateSyntax(formula.getEquation(), formula.getParameters());
     }
 }

@@ -459,3 +459,88 @@ on their formulas, and reply authors receive notifications when someone replies
 to them. Community writes use MongoDB transactions and require the replica-set
 configuration also used for publication review. Run the integration tests with
 `FORMULA_TEST_MONGO_URI` pointing to a writable MongoDB replica set.
+
+## Unit-aware calculations
+
+The web editor accepts an expected unit per parameter (`inputUnits`) and an
+optional `outputUnit`. Leave a field unset for a unitless number. For variadic
+formulas use the key `ITEM` as the expected unit for each value. Units with the
+same physical dimension convert via the reference unit. For example, register
+`cm` against `m` with factor `0.01`. Values are normalized to reference units
+before arithmetic and converted to the requested output unit afterwards.
+Compound units such as `m2`, `mps` and `BRL_per_kg` are available in the catalog.
+
+- `GET /api/formulas/units` lists active units. Administrators can list all units
+  at `GET /api/formulas/admin/units` and create or update them with
+  `PUT /api/formulas/admin/units/{code}`. An update sends `name`, `reference`,
+  `factor`, `active` and the `version` returned by the catalog. Base factors
+  equal one. A custom physical unit uses an active base unit as its reference.
+  To register a new physical dimension, pass its name as `dimension` with a
+  self-referencing base unit. To register a currency, use a three-letter uppercase
+  code as both its code and reference.
+- Saved formulas pin their expected units and factors. Public versions and
+  referenced builder formulas retain those definitions. A deactivated unit is
+  unavailable for new selections, while existing formulas can still use it as
+  their pinned unit. Other units selected at execution use their active factors.
+- `POST /api/formulas/calculate` runs a public formula, and
+  `POST /api/formulas/mine/calculate` runs an owned private formula. Pass its
+  `formulaId` (preferred) or `formulaName` and one of `variables` or `values`.
+- `POST /api/formulas/builder/calculate` previews an unsaved definition using
+  `{"formula": {...}, "inputs": {...}}`. When editing a private formula, pass
+  its ID in the `formulaId` query parameter. Public revisions preview via
+  `POST /api/formulas/admin/{id}/calculate-preview`.
+- Existing `/execute` endpoints retain their legacy contract for formulas
+  without units. Migrate clients to `/calculate` to execute measured formulas.
+
+For a formula that sums two weights in kilograms, the following values yield
+`{"value":"1.5","unit":"kg"}`. Leave `unit` unset to use the expected unit;
+for a unitless result, the response contains `"unit":null`.
+
+```json
+{
+  "formulaName": "TOTAL WEIGHT",
+  "variables": {
+    "A": {"value": "1"},
+    "B": {"value": "500", "unit": "g"}
+  }
+}
+```
+
+### Operators and functions
+
+The new calculation API parses expressions with EvalEx and evaluates a bounded
+set of numeric operations. Use `GET /api/formulas/calculation/functions` for
+the supported function names.
+
+| Operation | Unit behavior |
+| --- | --- |
+| `+`, `-`, `%`, comparisons | Require matching dimensions and currency codes when applicable. Comparisons return a unitless 0 or 1. |
+| `*`, `/`, `^`, `SQRT` | Combine or transform dimensions. A measured base uses a literal nonnegative integer exponent. |
+| `ABS`, `SUM`, `AVERAGE`, `MIN`, `MAX` | Preserve the dimension. Aggregates require matching dimensions for all operands. |
+| `IF(condition, yes, no)` | Uses a unitless condition and branches of the same dimension when the formula has units. |
+| `ROUND(value, places)`, `FLOOR`, `CEILING`, `FACT` | Require a unitless value. |
+| `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN` and their `R` variants, `LOG`, `LOG10`, `DEG`, `RAD` | Require unitless values. Trig functions use degrees by default and radians in the `R` variants. Their results and logarithms use double-precision approximations. |
+| `FX(AMOUNT, RATE, "BRL")` | Requires a currency amount and a positive unitless rate in target currency per source currency. For example, `FX(DOLLARS, 5, "BRL")` converts USD to BRL at 5 BRL per USD. |
+
+### Precision, errors and work limits
+
+The decimal path uses 34 significant digits with HALF_EVEN rounding, including
+unit conversions. Decimal values can be sent as strings to avoid converting them
+through binary floating point in the client. Results are decimal strings without
+trailing zeroes. The API applies no fixed number of decimal places for currency.
+`ROUND` accepts between -100 and 100 decimal places.
+
+The calculation endpoints return JSON errors with `code` and `message`.
+Invalid inputs and incompatible units return 400, unavailable formulas return
+404, and division by zero, invalid numeric domains, out-of-range numbers or
+unsupported operations return 422. Rate and concurrency limit responses return
+429. The API rejects NaN and infinity in inputs and rejects operations that
+would produce them. It rejects values outside the supported range instead of
+returning infinity or silently wrapping.
+
+The decimal evaluator limits formulas to 4,096 characters, 512 parsed nodes,
+64 levels and 100 inputs. It also limits coefficient sizes, decimal scales,
+the absolute adjusted decimal exponent to 300, power arguments to 100 and
+factorials to 166. Evaluation checks a 250 ms cooperative deadline between
+operations. That budget covers expression parsing and evaluation. Database
+lookups and HTTP request handling use their existing limits.
